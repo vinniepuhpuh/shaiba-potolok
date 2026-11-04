@@ -318,6 +318,25 @@ table.bx.pl th:first-child{width:46%}
 .match .side .lg{filter:drop-shadow(0 2px 4px #0003)}
 
 .flg{display:inline-block;vertical-align:-2px;border-radius:2px;box-shadow:0 0 0 .5px #0005;flex:none}
+
+.tour{position:fixed;inset:0;z-index:40}
+.tour-hole{position:fixed;border-radius:14px;box-shadow:0 0 0 9999px rgba(6,14,22,.74);transition:all .25s ease;pointer-events:none}
+.tour-card{position:fixed;left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));max-width:520px;margin:0 auto;background:var(--surface);color:var(--ink);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:10px;box-shadow:0 12px 40px #0008;transition:top .25s ease}
+.tour-card h3{font:800 17px/1.2 var(--fd)}
+.tour-card p{font-size:14.5px;line-height:1.5}
+.tour-card small{font:500 11.5px var(--fm)}
+.tour-dots{display:flex;gap:4px}
+.tour-dots i{flex:1;height:4px;border-radius:2px;background:var(--line)}
+.tour-dots i.done{background:var(--ink)}
+.tour-dots i.on{background:var(--red)}
+.hintc{background:var(--sunk);border-style:dashed}
+.hint-h{display:flex;align-items:center;gap:8px}
+.hint-i{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--blue);color:var(--surface);font:700 13px var(--fm);flex:none}
+.hintc .btn{align-self:flex-start}
+.gloss{display:flex;flex-direction:column;gap:10px}
+.gloss div{border-top:1px solid var(--line);padding-top:8px}
+.gloss b{font-weight:600}
+@media (prefers-reduced-motion:reduce){.tour-hole,.tour-card{transition:none}}
 </style>
 </head>
 <body>
@@ -517,7 +536,7 @@ function genPool(){
 }
 function makePicks(yr){S.teams.forEach(t=>{for(let rd=1;rd<=RNDS;rd++)S.picks.push({id:S.nid++,yr,rd,orig:t.id,own:t.id});});}
 function newWorld(){
-  S={v:6,win:1,os:[],box:[],live:null,nid:1,season:2026,cap:CAP0,phase:'regular',day:0,teams:[],players:[],picks:[],user:null,prevUser:null,sched:[],news:[],recent:[],dead:[],po:null,off:null,hist:[],draft:null,dOrder:null,lines:null,chem:{},offers:[],fin:newFin(),fired:false,tac:5,tacAuto:true};
+  S={v:6,seen:{},tutDone:false,win:1,os:[],box:[],live:null,nid:1,season:2026,cap:CAP0,phase:'regular',day:0,teams:[],players:[],picks:[],user:null,prevUser:null,sched:[],news:[],recent:[],dead:[],po:null,off:null,hist:[],draft:null,dOrder:null,lines:null,chem:{},offers:[],fin:newFin(),fired:false,tac:5,tacAuto:true};
   const owns=shuffle([...Array(32)].map((_,i)=>GMK[i%GMK.length]));
   TEAMS.forEach((t,i)=>{const o={id:i,city:t[0],name:t[1],ab:t[2],c1:t[3],c2:t[4],conf:t[5],div:t[6],nat:t[7],titles:0,lastPct:.5,own:owns[i],fail:0,lastRank:16};zst(o);S.teams.push(o);});
   S.teams.forEach(t=>{
@@ -1630,6 +1649,80 @@ function buyUpg(k){
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
 function load(){try{const s=localStorage.getItem(KEY);if(s){const o=JSON.parse(s);if(o&&o.v===6)return o;}}catch(e){}return null;}
 
+
+/* ---------- onboarding ---------- */
+const TOUR=[
+  {t:null,title:'Добро пожаловать, генеральный менеджер!',text:'Вы управляете хоккейным клубом: собираете состав, подписываете контракты, меняетесь с другими клубами и следите за деньгами. Матчи играют сами, ваша работа — решения. Покажу главное за минуту.',first:true},
+  {tab:'club',t:'cap',title:'Потолок зарплат',text:'Главное правило лиги: сумма зарплат всех игроков не может быть больше потолка. Полоса показывает, сколько уже потрачено. «Свободно» — сколько ещё можно добавить. «Касса» — деньги клуба на улучшения и разовые траты, это другое.'},
+  {tab:'club',t:'match',title:'Матчи',text:'«Смотреть матч» — трансляция на схеме площадки, около 4 минут, с перемоткой. «Сыграть быстро» — сразу результат. Кнопки ниже проматывают сразу несколько дней. За сезон 82 матча, лучшие 8 команд конференции выходят в плей-офф.'},
+  {tab:'club',t:'tactic',title:'Тактика',text:'Ползунок от обороны к атаке. Против сильных закрывайтесь, против слабых атакуйте. Если не хотите думать — оставьте «Авто», игра подберёт сама.'},
+  {tab:'fin',t:'owner',title:'Владелец и его цель',text:'Каждый сезон владелец ставит цель: выйти в плей-офф, пройти раунд или набрать очки. Выполнили — доверие растёт, провалили — падает. Первые 2 сезона он прощает ошибки вдвое легче, так что можно учиться.'},
+  {tab:'fin',t:'spon',title:'Спонсоры — первое дело',text:'Спонсоры приносят деньги каждый день сезона. Сейчас слоты пустые: после обучения выберите предложения здесь. Не уверены — берите «Стабильный».'},
+  {tab:'roster',t:'rs-seg',title:'Состав',text:'Во вкладке «Игроки» весь ваш состав с рейтингом и контрактами. В «Звеньях» вы сами ставите игроков в тройки и пары. Если лень — кнопка «Собрать автоматически» всё сделает за вас.'},
+  {tab:'market',mk:'fa',t:'mk-seg',title:'Рынок',text:'Здесь усиливают команду: «Агенты» — игроки без клуба, их можно подписать сразу. «Поиск» — игроки других клубов. «Обмены» — меняться с клубами. «Драфт» — молодые таланты.'},
+  {tab:'market',mk:'fa',t:'fa',title:'Как подписать игрока',text:'Нажмите на игрока и «Предложить контракт». Предложите сумму близко к запросу — шанс высокий. Слишком мало — игрок теряет терпение и может прекратить переговоры.'},
+  {t:null,title:'Ваш первый ход',text:'1. Выберите спонсоров во вкладке «Финансы».\n2. Вернитесь в «Клуб» и сыграйте первый матч.\n3. Если состав слабый — загляните на «Рынок».\nПо ходу игры я буду подсказывать про новые возможности. Обучение можно повторить в меню «⋯».',last:true}
+];
+const HINTS={
+  live:['Трансляция матча','Точки — игроки, чёрная — шайба. Скорость и перемотка под площадкой. В перерывах можно сменить тактику и звенья. Можно в любой момент нажать «До конца матча».'],
+  offer:['Переговоры','Шанс согласия зависит от суммы и срока. Каждый отказ снижает терпение игрока. Бонус агенту платится из кассы и возвращает терпение. Своим игрокам можно дать до 8 лет, чужим до 7.'],
+  lines:['Звенья','Первое звено играет больше всех. Ставьте игроков на их позиции. Сочетание ролей (снайпер + плеймейкер + двусторонний) сразу даёт бонус. Чем дольше звено играет вместе, тем сильнее сыгранность.'],
+  trade:['Обмены','Выберите клуб, отметьте, кого отдаёте и кого хотите получить. Шкала покажет, интересна ли сделка. Каждый ГМ оценивает игроков по-своему: «Строитель» любит молодых, «Олигарх» — опытных.'],
+  off:['Межсезонье','Сезон окончен. Сначала продлите контракты своих игроков: у вас приоритет. Потом драфт новичков, потом 7 дней рынка свободных агентов. Когда будете готовы — «Начать сезон».'],
+  draft:['Драфт','Каждый клуб по очереди выбирает молодых игроков. Скауты оценивают их приблизительно. Выбранные не занимают место в составе: подпишите их, когда подрастут, в «Состав» → «Права».'],
+  fa:['Рынок свободных агентов','7 дней торгов. В конце каждого дня другие клубы забирают часть игроков, сильнейших — в первые дни. С 3-го дня цены падают: ждать выгодно, но рискованно.'],
+  fin:['Финансы','Доходы: билеты, джерси, ТВ, спонсоры. Расходы: зарплаты и содержание. Лишние деньги вкладывайте в улучшения: арена, тренировочная база, медштаб, скауты.']
+};
+const GLOSS=[
+  ['Потолок зарплат','Максимальная сумма зарплат всех игроков клуба. Растёт на 2.5% каждый сезон.'],
+  ['Касса','Деньги клуба. Тратятся на улучшения, сборы, лагеря, бонусы агентам. Зарплаты списываются отсюда же по ходу сезона.'],
+  ['Рейтинг и потенциал','Рейтинг — текущая сила игрока. Потенциал — до чего он может вырасти. Молодые растут, после 33 лет начинается спад.'],
+  ['Звено и связка','Тройка нападающих или пара защитников. Связка — удачное сочетание ролей, даёт бонус к силе.'],
+  ['Терпение','Сколько отказов игрок готов вытерпеть в переговорах. На нуле он закрывает переговоры до конца окна.'],
+  ['Мёртвые деньги','Если расторгнуть контракт, половина зарплаты остаётся под потолком до конца срока.'],
+  ['Права на драфтованных','Игроки, выбранные на драфте. Не занимают место в составе 2 года, пока вы их не подпишете.'],
+  ['Вне потолка','Если игрок травмирован на 20+ матчей, его зарплата временно не считается, и можно взять замену.'],
+  ['Дедлайн обменов','После 60-го дня сезона обмены закрыты до межсезонья.'],
+  ['ГМ клуба','Каждым ИИ-клубом управляет ГМ со своим стилем: от этого зависят его тактика и сделки.'],
+  ['Доверие владельца','Оценка вашей работы от 0 до 100. При 10 и ниже владелец ставит ультиматум, при провале — увольнение.']
+];
+const seen=k=>!!(S.seen&&S.seen[k]);
+function hint(k){
+  if(!S||S.user==null||seen(k)||U.tour)return '';
+  const [t,x]=HINTS[k];
+  return `<section class="card hintc"><div class="hint-h"><span class="hint-i">?</span><b>${t}</b></div><p class="small">${x}</p><button class="btn sm" data-a="seen" data-id="${k}">Понятно</button></section>`;
+}
+function tourStart(){U.tour={i:0};U.sheet=null;}
+function tourGo(i){
+  if(i<0)return;
+  if(i>=TOUR.length){U.tour=null;S.tutDone=true;U.tab='club';return;}
+  U.tour.i=i;U.tour.scrolled=false;const s=TOUR[i];
+  if(s.tab){U.tab=s.tab;if(s.tab==='roster')U.rs='players';if(s.mk)U.mk=s.mk;}
+}
+function tourHTML(){
+  if(!U.tour||S.user==null)return '';
+  const i=U.tour.i,s=TOUR[i],n=TOUR.length;
+  const dots=`<div class="tour-dots">${TOUR.map((_,k)=>`<i class="${k===i?'on':k<i?'done':''}"></i>`).join('')}</div>`;
+  const btns=s.first?`<div class="btn-row"><button class="btn" data-a="tourSkip">Я разберусь сам</button><button class="btn pri" data-a="tourNext">Начать</button></div>`
+    :s.last?`<div class="btn-row"><button class="btn pri" data-a="tourNext">Играть</button></div>`
+    :`<div class="btn-row"><button class="btn sm" data-a="tourSkip">Пропустить</button><button class="btn sm" data-a="tourPrev">Назад</button><button class="btn sm pri" data-a="tourNext">Далее</button></div>`;
+  return `<div class="tour" id="tour"><div class="tour-hole" id="tourHole"></div><div class="tour-card" id="tourCard" role="dialog" aria-label="Обучение">${dots}<h3>${s.title}</h3><p>${s.text.replace(/\n/g,'<br>')}</p>${btns}<small class="muted">${i+1} из ${n}</small></div></div>`;
+}
+function tourPlace(){
+  if(!U.tour)return;
+  const s=TOUR[U.tour.i],hole=document.getElementById('tourHole'),card=document.getElementById('tourCard');
+  if(!hole||!card)return;
+  const el=s.t?document.querySelector(`[data-tut="${s.t}"]`):null;
+  const vw=window.innerWidth,vh=window.innerHeight;
+  if(!el){hole.style.cssText='left:50%;top:50%;width:0;height:0';card.style.top=Math.max(20,(vh-card.offsetHeight)/2)+'px';return;}
+  if(!U.tour.scrolled){U.tour.scrolled=true;const r0=el.getBoundingClientRect(),tall=r0.height>vh*.45;
+    if(tall){window.scrollBy(0,r0.top-130);}else if(r0.top<90||r0.bottom>vh-90){try{el.scrollIntoView({block:'center'});}catch(e){}}}
+  const r=el.getBoundingClientRect(),pad=6,hh=Math.min(r.height,vh*.38);
+  hole.style.cssText=`left:${r.left-pad}px;top:${r.top-pad}px;width:${r.width+pad*2}px;height:${hh+pad*2}px`;
+  const ch=card.offsetHeight,below=r.top+hh+pad+12,above=r.top-pad-12-ch;
+  card.style.top=(below+ch<vh-8?below:above>8?above:Math.max(8,vh-ch-8))+'px';
+}
+
 /* ---------- views ---------- */
 const FLAGS={
 RUS:'<rect width="18" height="4" fill="#fff"/><rect y="4" width="18" height="4" fill="#0039a6"/><rect y="8" width="18" height="4" fill="#d52b1e"/>',
@@ -1698,7 +1791,7 @@ function header(){
   const rec=gp(t)?`${t.w}-${t.l}-${t.ot} · ${pts(t)} оч.`:'';
   const ph=S.phase==='regular'?`День ${Math.min(S.day+1,DAYS)}/${DAYS}`:S.phase==='playoffs'?'Плей-офф':S.phase==='done'?'Сезон завершён':S.off&&S.off.step==='fa'?`Рынок, день ${Math.min(S.off.day,FA_DAYS)}/${FA_DAYS}`:'Межсезонье';
   return `<header class="top gut"><div class="top-row">${badge(t,44)}<div class="top-name"><h1>${t.city} ${t.name}</h1><small>${seasonLbl()} · ${ph}${rec?' · '+rec:''}</small></div><button class="icon-btn" data-a="menu" aria-label="Меню">${ICON.menu}</button></div>
-  <div class="cap"><div class="cap-bar"><i style="width:${clamp((pay-dead)/S.cap,0,1)*100}%;background:var(--board-ink)"></i><i style="width:${clamp(dead/S.cap,0,1)*100}%;background:var(--red)"></i></div>
+  <div class="cap" data-tut="cap"><div class="cap-bar"><i style="width:${clamp((pay-dead)/S.cap,0,1)*100}%;background:var(--board-ink)"></i><i style="width:${clamp(dead/S.cap,0,1)*100}%;background:var(--red)"></i></div>
   <div class="cap-lbl"><span>Зарплаты <b>${money(pay)}</b> / ${money(S.cap)}</span><span>Свободно <b style="${room<0?'color:var(--red)':''}">${money(room)}</b></span><span>Касса <b style="${S.fin.cash<0?'color:var(--red)':''}">${money(S.fin.cash)}</b></span></div></div></header>`;
 }
 function tabs(){
@@ -1724,7 +1817,7 @@ function recentStrip(){
 function tacticCard(opp,home){
   const rec=recTac(S.user,opp,null,home),ot=tacFor(opp,S.user,null,!home),o=T(opp);
   const cur=S.tacAuto?rec:S.tac;
-  return `<section class="card"><h2>Тактика<span>против ${o.city}</span></h2>
+  return `<section class="card" data-tut="tactic"><h2>Тактика<span>против ${o.city}</span></h2>
   <div class="chance"><span>${S.tacAuto?'Авто под соперника':'Ваш выбор'}</span><b id="tacLbl" style="font-size:16px">${cur} · ${TACN[cur]}</b></div>
   <input type="range" id="tac" min="1" max="10" step="1" value="${cur}" aria-label="Стиль игры" ${S.tacAuto?'disabled':''}>
   <div class="tac-ends"><span>Полная оборона</span><span>Всё в атаку</span></div>
@@ -1762,7 +1855,7 @@ function viewClub(){
   if(S.phase==='regular'){
     const g=S.sched[S.day].find(([h,a])=>h===S.user||a===S.user);
     const home=g[0]===S.user,opp=T(home?g[1]:g[0]),me=T(S.user);
-    main=`<section class="card"><h2>Следующий матч<span>${home?'дома':'в гостях'}</span></h2>
+    main=`<section class="card" data-tut="match"><h2>Следующий матч<span>${home?'дома':'в гостях'}</span></h2>
     <div class="match"><div class="side">${badge(me,64)}<b>${me.name}</b><span class="rt">сила ${R_[me.id].t.toFixed(1)}</span></div><span class="vs">VS</span><div class="side">${badge(opp,64)}<b>${opp.name}</b><span class="rt">сила ${R_[opp.id].t.toFixed(1)}</span></div></div>
     <div class="btn-row"><button class="btn pri" data-a="watch">Смотреть матч</button><button class="btn" data-a="play" data-id="1">Сыграть быстро</button></div><div class="btn-row"><button class="btn" data-a="play" data-id="7">+7 дней</button>${S.day<DEADLINE?`<button class="btn" data-a="play" data-id="dl">До дедлайна</button>`:''}<button class="btn" data-a="play" data-id="end">До конца</button></div>
     ${recentStrip()}<p class="small muted">${S.day<DEADLINE?`До дедлайна обменов: ${DEADLINE-S.day} дн.`:'Дедлайн прошёл: обмены закрыты до межсезонья.'} Цель владельца: ${S.fin.goal?S.fin.goal.txt.toLowerCase():'—'}.</p></section>`;
@@ -1796,7 +1889,7 @@ function viewOff(){
   if(S.fired)return review;
   if(st==='resign'){
     const ex=roster(S.user).filter(p=>p.exp);
-    return review+`<section class="card"><h2>Межсезонье</h2>${steps}<p>${ex.length?'У этих игроков закончились контракты. У вас приоритет: другие клубы не вмешиваются, а своим можно предложить до 8 лет. Тех, кого не продлите, заберёт рынок.':'Истекающих контрактов нет.'}</p>
+    return review+hint('off')+`<section class="card"><h2>Межсезонье</h2>${steps}<p>${ex.length?'У этих игроков закончились контракты. У вас приоритет: другие клубы не вмешиваются, а своим можно предложить до 8 лет. Тех, кого не продлите, заберёт рынок.':'Истекающих контрактов нет.'}</p>
     <div class="list">${ex.sort(byOvr).map(p=>pRow(p)).join('')}</div><button class="btn pri" data-a="endResign">Перейти к драфту</button></section>`;
   }
   if(st==='draft'){
@@ -1804,7 +1897,7 @@ function viewOff(){
     return `<section class="card hl"><h2>Драфт ${D.yr}</h2>${steps}<p>Ваш ход: ${s.rd}-й раунд, выбор №${s.n}. Список проспектов во вкладке «Рынок» → «Драфт».</p><button class="btn pri" data-a="goDraft">К драфту</button></section>`;
   }
   const n=rcount(S.user),nr=rightsOf(S.user).length,d=S.off.day,open=d<=FA_DAYS;
-  return `<section class="card"><h2>Рынок свободных агентов<span>${open?`день ${d} из ${FA_DAYS}`:'закрыт'}</span></h2>${steps}
+  return hint('fa')+`<section class="card"><h2>Рынок свободных агентов<span>${open?`день ${d} из ${FA_DAYS}`:'закрыт'}</span></h2>${steps}
   <div class="pips wide">${[...Array(FA_DAYS)].map((_,k)=>`<i class="${k<d-1?'on':''}"></i>`).join('')}</div>
   <p>${open?`Каждый день другие клубы подписывают часть агентов, сильнейшие уходят в первые дни. С 3-го дня запросы снижаются. Подписывайте, меняйтесь, оплатите летний сбор во вкладке «Финансы»${nr?`, решите судьбу ${nr} проспектов с правами («Состав» → «Права»)`:''}.`:'Рынок закрыт, оставшиеся агенты доступны и в сезоне.'}</p>
   <div class="kv"><div><small>Игроков</small><b class="${n>MAX_ROSTER||n<MIN_ROSTER?'bad':''}">${n}</b></div><div><small>Свободно</small><b>${money(S.cap-payroll(S.user))}</b></div><div><small>Вратарей</small><b>${gCount(S.user)}</b></div></div>
@@ -1813,7 +1906,7 @@ function viewOff(){
 }
 function viewRoster(){
   const nr=rightsOf(S.user).length;
-  const seg=`<div class="seg"><button data-a="rs" data-id="players" aria-pressed="${U.rs==='players'}">Игроки</button><button data-a="rs" data-id="lines" aria-pressed="${U.rs==='lines'}">Звенья</button><button data-a="rs" data-id="rights" aria-pressed="${U.rs==='rights'}">Права${nr?' ('+nr+')':''}</button></div>`;
+  const seg=`<div class="seg" data-tut="rs-seg"><button data-a="rs" data-id="players" aria-pressed="${U.rs==='players'}">Игроки</button><button data-a="rs" data-id="lines" aria-pressed="${U.rs==='lines'}">Звенья</button><button data-a="rs" data-id="rights" aria-pressed="${U.rs==='rights'}">Права${nr?' ('+nr+')':''}</button></div>`;
   if(U.rs==='lines')return seg+viewLines();
   if(U.rs==='rights'){
     const r=rightsOf(S.user).sort((a,b)=>b.pot-a.pot);
@@ -1838,7 +1931,7 @@ function viewLines(){
   const chem=(l,kind)=>{const c=combo(l,M,kind),n=chemN(l),tot=chemB(l,M,kind);return `<div class="meter"><small>Сыгранность<b>${n} игр · +${tot.toFixed(1)}</b></small><div class="bar good"><i style="width:${clamp(tot/5.5,0,1)*100}%"></i></div></div><span class="combo l${c.lv}">${c.t}${c.lv?` · сразу +${c.b}, рост ×${c.g}`:''}</span>`;};
   const bench=healthy(S.user).filter(p=>!lineIds(L).includes(p.id)).sort(byOvr);
   const out=active(S.user).filter(p=>p.inj||p.camp);
-  return `<section class="card"><div class="kv"><div><small>Нападение</small><b>${r.f.toFixed(1)}</b></div><div><small>Защита</small><b>${r.d.toFixed(1)}</b></div><div><small>Итог</small><b>${r.t.toFixed(1)}</b></div></div>
+  return hint('lines')+`<section class="card"><div class="kv"><div><small>Нападение</small><b>${r.f.toFixed(1)}</b></div><div><small>Защита</small><b>${r.d.toFixed(1)}</b></div><div><small>Итог</small><b>${r.t.toFixed(1)}</b></div></div>
   <div class="kv two"><div><small>Бригада большинства</small><b>${u.pp.toFixed(1)}</b></div><div><small>Бригада меньшинства</small><b>${u.pk.toFixed(1)}</b></div></div>
   <p class="small muted">Нажмите на позицию, чтобы поставить другого игрока: сверху игроки на своей позиции, первыми те, кто даёт звену связку ролей. Не своя позиция: смена фланга −2, крайний в центре −4, нападающий в защите −10. Идеальная тройка — снайпер, плеймейкер и двусторонний; идеальная пара — атакующий и оборонительный.</p>
   <button class="btn" data-a="autoLines">Собрать автоматически</button></section>
@@ -1850,7 +1943,7 @@ function viewLines(){
 }
 function viewMarket(){
   const draftLive=S.phase==='offseason'&&S.off&&S.off.step==='draft';
-  const seg=`<div class="seg four">${[['fa','Агенты'],['search','Поиск'],['trade','Обмены'],['draft','Драфт'+(draftLive?' •':'')]].map(([k,n])=>`<button data-a="mk" data-id="${k}" aria-pressed="${U.mk===k}">${n}</button>`).join('')}</div>`;
+  const seg=`<div class="seg four" data-tut="mk-seg">${[['fa','Агенты'],['search','Поиск'],['trade','Обмены'],['draft','Драфт'+(draftLive?' •':'')]].map(([k,n])=>`<button data-a="mk" data-id="${k}" aria-pressed="${U.mk===k}">${n}</button>`).join('')}</div>`;
   if(U.mk==='draft')return seg+viewDraft();
   if(U.mk==='search')return seg+viewSearch();
   if(U.mk==='fa'){
@@ -1860,7 +1953,7 @@ function viewMarket(){
     return seg+(faOn?`<section class="card hl"><h2>Рынок, день ${S.off.day} из ${FA_DAYS}</h2><p class="small">Другие клубы подписывают игроков в конце каждого дня. Интерес клубов виден в карточке игрока.</p><button class="btn" data-a="faDay">Следующий день</button></section>`:'')+
     `<section class="card"><h2>Престиж клуба<span>${Math.round(presU()*100)}/100</span></h2><div class="bar"><i style="width:${presU()*100}%"></i></div>
     <p class="small">${disc>=0?`Игроки готовы работать у вас дешевле: <b class="ok">−${disc}%</b> к запросу.`:`Клуб пока не привлекает игроков: <b class="bad">+${-disc}%</b> к запросу.`} Престиж растёт от силы состава, очков в сезоне и интереса болельщиков.</p></section>
-    <section class="card"><h2>Свободные агенты<span>${fa.length} · цены для вас</span></h2><div class="chips">${P_.map(k=>`<button class="chip" data-a="posF" data-id="${k}" aria-pressed="${U.posF===k}">${k==='all'?'Все':POS[k]}</button>`).join('')}</div>
+    <section class="card" data-tut="fa"><h2>Свободные агенты<span>${fa.length} · цены для вас</span></h2><div class="chips">${P_.map(k=>`<button class="chip" data-a="posF" data-id="${k}" aria-pressed="${U.posF===k}">${k==='all'?'Все':POS[k]}</button>`).join('')}</div>
     <div class="list">${fa.slice(0,60).map(p=>pRow(p)).join('')||'<p class="muted">Никого нет.</p>'}</div><p class="small muted">Отказ снижает терпение игрока. Когда оно кончится, он закроет переговоры с вами до конца окна. Бонус агенту восстанавливает терпение. Не подписанные два межсезонья подряд уходят из хоккея.</p></section>`;
   }
   if(!canMarket())return seg+`<section class="card"><h2>Обмены закрыты</h2><p>${S.phase==='regular'?'Дедлайн обменов прошёл.':'Во время плей-офф обмены запрещены.'} Окно откроется в межсезонье.</p></section>`;
@@ -1880,7 +1973,7 @@ function viewMarket(){
     <section class="card"><h2>Вы отдаёте<span>${tr.give.length+tr.giveP.length}</span></h2><div class="list">${mine.map(p=>pRow(p,{act:'tgGive',sel:tr.give.includes(p.id)})).join('')}${myP.length?`<div class="grp"><span>Ваши пики</span><span>${myP.length}</span></div>`+myP.map(k=>pkRow(k,'tgGiveP',tr.giveP.includes(k.id))).join(''):''}</div></section>
     <section class="card"><h2>Вы получаете<span>${t.ab} · свободно ${money(S.cap-payroll(t.id))}</span></h2><div class="list">${theirs.map(p=>pRow(p,{act:'tgGet',sel:tr.get.includes(p.id)})).join('')}${thP.length?`<div class="grp"><span>Их пики</span><span>${thP.length}</span></div>`+thP.map(k=>pkRow(k,'tgGetP',tr.getP.includes(k.id))).join(''):''}</div></section>`;
   }
-  return seg+`<section class="card"><h2>Партнёр по обмену</h2><select id="tradeTeam" aria-label="Клуб для обмена"><option value="">Выберите клуб</option>${opts}</select></section>`+body;
+  return seg+hint('trade')+`<section class="card"><h2>Партнёр по обмену</h2><select id="tradeTeam" aria-label="Клуб для обмена"><option value="">Выберите клуб</option>${opts}</select></section>`+body;
 }
 function viewSearch(){
   const f=U.f;
@@ -1933,7 +2026,7 @@ function viewDraft(){
   <div class="chips">${['all','C','LW','RW','D','G'].map(k=>`<button class="chip" data-a="dPos" data-id="${k}" aria-pressed="${U.dPos===k}">${k==='all'?'Все':POS[k]}</button>`).join('')}</div>
   <p class="small muted">Рейтинг и потенциал — оценки ваших скаутов (уровень ${F.scout}): ${UPG.scout.d(F.scout)}.${mx?` Точных просмотров: ${F.exam.length} из ${mx}.`:''} ${myTurn?'Нажмите на проспекта, чтобы выбрать его.':'Нажмите на проспекта, чтобы открыть его карточку.'}</p>
   <div class="list">${pool.slice(0,80).map(({p,e,o},i)=>`<button class="prow" data-a="${myTurn?'draft':'player'}" data-id="${p.id}"><span class="pos ${p.pos}">${POS[p.pos]}</span><span class="pn"><b>${i+1}. ${full(p)}${known(p)?'<span class="flag ok">изучен</span>':''}</b><small>${p.age} л · ${flag(p.nat)} · ${roleVis(p)?ROLES[p.role]||'вратарь':'роль ?'}</small></span><span class="ovr ${tier(o)}">${known(p)?'':'~'}${o}</span><span class="money"><b>${potTxt(p)}</b><small>потенциал</small></span></button>`).join('')}</div></section>`;
-  return head+osCard()+picks+lot+list;
+  return hint('draft')+head+osCard()+picks+lot+list;
 }
 function finChart(){
   const F=S.fin,dl=F.daily;
@@ -1982,17 +2075,17 @@ function viewFin(){
   const young=active(S.user).filter(p=>p.age<=23).sort(byOvr),inCamp=young.filter(p=>p.camp);
   const devHTML=S.phase==='regular'?`<p class="small muted">До 3 игроков не старше 23 лет уезжают на 10 игровых дней и пропускают матчи. По возвращении +1…+3 к рейтингу, не выше потенциала. Один раз за сезон на игрока.</p>
     <div class="list">${young.map(p=>{const ok=!p.camp&&!p.inj&&p.campS!==S.season&&inCamp.length<3;return `<div class="prow" style="grid-template-columns:34px 1fr auto auto;cursor:default"><span class="pos ${p.pos}">${POS[p.pos]}</span><span class="pn"><b>${nm(p)}${pFlags(p,true)}</b><small>${p.age} л · пот. ${p.pot}</small></span><span class="ovr ${tier(p.ovr)}">${p.ovr}</span>${p.camp?`<small class="muted">${p.camp} дн.</small>`:`<button class="btn sm" data-a="dev" data-id="${p.id}" ${ok&&F.cash>=devCost()?'':'disabled'}>${p.campS===S.season?'был':money(devCost())}</button>`}</div>`;}).join('')||'<p class="muted small">В составе нет игроков до 23 лет.</p>'}</div>`:'<p class="small muted">Лагерь развития работает во время регулярного сезона.</p>';
-  return `<section class="card"><h2>Касса клуба</h2><div class="kv two"><div><small>На счёте</small><b class="${F.cash<0?'bad':''}">${money(F.cash)}</b></div><div><small>Итог сезона ${S.phase==='offseason'?'(новый)':'пока'}</small><b class="${net<0?'bad':'ok'}">${money(net)}</b></div></div>
+  return hint('fin')+`<section class="card"><h2>Касса клуба</h2><div class="kv two"><div><small>На счёте</small><b class="${F.cash<0?'bad':''}">${money(F.cash)}</b></div><div><small>Итог сезона ${S.phase==='offseason'?'(новый)':'пока'}</small><b class="${net<0?'bad':'ok'}">${money(net)}</b></div></div>
   ${finChart()}
   <div class="pl">${row('Билеты',ps.tix)}${row('Джерси',ps.jer)}${row('ТВ и лига',ps.tv)}${row('Спонсоры и арена',ps.spon)}${row('Зарплаты',ps.sal)}${row('Арена и персонал',ps.ops)}${row('Улучшения',ps.upg)}${row('Разовые траты',ps.misc)}<span class="tot">Итого</span><b class="tot ${net<0?'neg':''}">${money(net)}</b>${ps.div?row('Дивиденды владельцу',ps.div):''}</div>
   ${histChart()}</section>
-  <section class="card ${F.ult?'hl':''}"><h2>Владелец<span>${F.owner}/100</span></h2><div class="bar ${F.owner<35?'red':'good'}"><i style="width:${F.owner}%"></i></div>
+  <section class="card ${F.ult?'hl':''}" data-tut="owner"><h2>Владелец<span>${F.owner}/100</span></h2><div class="bar ${F.owner<35?'red':'good'}"><i style="width:${F.owner}%"></i></div>
   <p><b>Цель сезона:</b> ${goal?goal.txt.toLowerCase():'появится со стартом сезона'}${gstat?` <span class="muted small">(${gstat})</span>`:''}</p>
   <div class="factors"><span>Финансовый итог сезона пока</span><b class="${net<0?'bad':'ok'}">${money(net)}</b></div>
   ${F.ult?'<p class="bad small">Действует ультиматум: провал цели в этом сезоне означает увольнение.</p>':''}${F.ten<2?`<p class="small ok">Испытательный срок: ещё ${2-F.ten} ${F.ten===1?'сезон':'сезона'} штрафы вдвое меньше.</p>`:''}
   <p class="small muted">Цель выполнена +12, провал от −5 до −10 в зависимости от того, насколько близко был результат. Прибыль +6, убыток от −3 до −8, чемпионство ещё +20. При доверии 10 и ниже владелец объявляет ультиматум на сезон.</p>
   <div class="upg"><b>Дивиденды владельцу</b><span></span><small>$5M из кассы → +2 доверия. В этом сезоне выплачено ${F.divN} из 5.</small><button class="btn sm" data-a="div" ${F.divN>=5||F.cash<5000?'disabled':''}>$5M</button></div></section>
-  <section class="card"><h2>Спонсоры<span>${money(sum(F.spon.filter(Boolean),x=>x.amt))} в год</span></h2>${sponHTML}
+  <section class="card" data-tut="spon"><h2>Спонсоры<span>${money(sum(F.spon.filter(Boolean),x=>x.amt))} в год</span></h2>${sponHTML}
   <p class="small muted">Выплаты идут каждый день регулярного сезона, бонусы за плей-офф начисляются после финала. Незаполненный слот перед стартом сезона займёт стабильный спонсор.</p></section>
   <section class="card"><h2>Название арены</h2>${nameHTML}</section>
   <section class="card"><h2>Летний сбор</h2>${campHTML}</section>
@@ -2063,7 +2156,7 @@ function sheetOffer(){
   const yrs=o.temp?1:o.yrs,cy=o.temp?p.askY:yrs,c=chance(p,o.sal,cy),room=S.cap-payroll(S.user)-o.sal,disc=Math.round((1-discU())*100),req=reqFor(p,cy),drop=patDrop(p,o.sal,cy);
   const lt=p.team===-1?ltirFree():[],mY=maxY(p);
   const ta=termAdj(p,cy),tnote=o.temp?'Временный контракт: срок до возвращения травмированного.':ta.f>1.001?`За такой срок просит больше: ×${ta.f.toFixed(2)}.`:ta.f<.999?`За длинный контракт готов уступить: ×${ta.f.toFixed(2)}.`:ta.pen>0?'Срок не совпадает с желаемым: шанс ниже.':'Срок совпадает с желаемым.';
-  return `<div class="stack"><div><h3>${p.exp?'Продление':'Контракт'}: ${full(p)}</h3><p class="sub">${POS_FULL[p.pos]}${p.role?' · '+ROLES[p.role]:''} · ${p.age} лет · рейтинг ${p.ovr}, потенциал ${p.pot}.</p></div>
+  return `<div class="stack">${hint('offer')}<div><h3>${p.exp?'Продление':'Контракт'}: ${full(p)}</h3><p class="sub">${POS_FULL[p.pos]}${p.role?' · '+ROLES[p.role]:''} · ${p.age} лет · рейтинг ${p.ovr}, потенциал ${p.pot}.</p></div>
   <div class="factors"><span>Базовый запрос</span><b>${money(p.ask)}</b><span>Престиж вашего клуба</span><b class="${disc>=0?'ok':'bad'}">${disc>=0?'−':'+'}${Math.abs(disc)}%</b>${p.exp?'<span>Лояльность к клубу</span><b class="ok">+12% к шансу</b>':''}${p.agentW===S.win?'<span>Бонус агенту</span><b class="ok">+5% к шансу</b>':''}<span>Желаемый срок</span><b>${p.askY} ${yw(p.askY)}</b><span>Ожидает при выбранном сроке</span><b>${money(req)}</b></div>
   <div><div class="chance"><span>Терпение</span><b style="font-size:15px">${p.pat}/100</b></div><div class="bar ${p.pat<35?'red':'good'}"><i style="width:${p.pat}%"></i></div><p class="small muted" style="margin-top:4px">Если откажет: −${drop}. При нуле игрок прекратит переговоры до конца окна.</p></div>
   ${lt.length?`<div class="seg"><button data-a="otemp" data-id="0" aria-pressed="${!o.temp}">Обычный контракт</button><button data-a="otemp" data-id="${lt[0].id}" aria-pressed="${!!o.temp}">Временно вместо ${nm(lt[0])}</button></div>`:''}
@@ -2095,8 +2188,12 @@ function sheetPreview(t){
   <div class="list">${top.map(p=>`<div class="prow" style="cursor:default"><span class="pos ${p.pos}">${POS[p.pos]}</span><span class="pn"><b>${full(p)}</b><small>${p.age} л · ${flag(p.nat)} · ${p.role?ROLES[p.role]:'вратарь'}</small></span><span class="ovr ${tier(p.ovr)}">${p.ovr}</span><span class="money"><b>${money(p.sal)}</b><small>${p.yrs} ${yw(p.yrs)}</small></span></div>`).join('')}</div>
   <button class="btn pri" data-a="take" data-id="${t.id}">Возглавить клуб</button></div>`;
 }
+function sheetHelp(){
+  return `<div class="stack"><h3>Как играть</h3><p class="sub">Главные понятия игры коротко.</p><div class="gloss">${GLOSS.map(([a,b])=>`<div><b>${a}</b><p class="small">${b}</p></div>`).join('')}</div><button class="btn pri" data-a="tourAgain">Пройти обучение заново</button><button class="btn" data-a="close">Закрыть</button></div>`;
+}
 function sheetMenu(){
-  return `<div class="stack"><h3>Меню</h3><p class="sub">Игра сохраняется автоматически в этом браузере.</p>
+  return `<div class="stack"><h3>Меню</h3><p class="sub">Игра сохраняется автоматически на этом устройстве.</p>
+  <button class="btn" data-a="help">Как играть</button><button class="btn" data-a="tourAgain">Пройти обучение заново</button><button class="btn" data-a="hintsReset">Показать подсказки снова</button>
   ${U.confirm==='new'?`<p class="warn">Текущий прогресс будет удалён. Начать заново?</p><button class="btn pri" data-a="newYes">Да, новая игра</button>`:`<button class="btn" data-a="newGame">Новая игра</button>`}
   <button class="btn" data-a="close">Закрыть</button></div>`;
 }
@@ -2118,12 +2215,14 @@ function render(){
     else if(s.type==='slot')inner=sheetSlot();
     else if(s.type==='preview')inner=sheetPreview(T(s.id));
     else if(s.type==='menu')inner=sheetMenu();
+    else if(s.type==='help')inner=sheetHelp();
     else if(s.type==='box')inner=S.box[s.i]?`<div class="stack">${boxView(S.box[s.i],false)}</div>`:'';
     html+=`<div class="veil" data-a="veil"><div class="sheet gut" role="dialog" aria-modal="true"><div class="grab"></div>${inner}</div></div>`;
   }
   const liveOn=S.live&&U.mv&&S.user!=null;
   if(liveOn)html+=matchView();
   if(U.toast)html+=`<div class="toast" role="status">${U.toast}</div>`;
+  html+=tourHTML();
   const mvEl=document.getElementById('mv'),my=mvEl?mvEl.scrollTop:0;
   const shEl=document.querySelector?document.querySelector('.sheet'):null,shy=shEl?shEl.scrollTop:0;
   const y=window.scrollY;app.innerHTML=html;window.scrollTo(0,y);
@@ -2132,6 +2231,7 @@ function render(){
   document.body.style.overflow=liveOn?'hidden':'';
   if(U.startT){U.startT=false;startTimer();}
   tgSync();
+  if(U.tour)requestAnimationFrame(tourPlace);
 }
 let toastT;
 function toast(msg){U.toast=msg;clearTimeout(toastT);toastT=setTimeout(()=>{U.toast=null;render();},2800);}
@@ -2152,7 +2252,14 @@ function act(a,id){
     case 'box':U.sheet={type:'box',i:n};break;
     case 'veil':case 'close':U.sheet=null;U.confirm=null;U.slot=null;break;
     case 'preview':U.sheet={type:'preview',id:n};break;
-    case 'take':U.sheet=null;takeTeam(n);break;
+    case 'take':U.sheet=null;takeTeam(n);if(!S.tutDone)tourStart();break;
+    case 'tourNext':tourGo(U.tour.i+1);window.scrollTo(0,0);break;
+    case 'tourPrev':tourGo(U.tour.i-1);window.scrollTo(0,0);break;
+    case 'tourSkip':U.tour=null;S.tutDone=true;break;
+    case 'tourAgain':U.sheet=null;tourStart();window.scrollTo(0,0);break;
+    case 'help':U.sheet={type:'help'};break;
+    case 'seen':S.seen=S.seen||{};S.seen[id]=true;U.keepSheet=true;break;
+    case 'hintsReset':S.seen={};U.sheet=null;toast('Подсказки снова будут появляться.');break;
     case 'tab':U.tab=id;U.sheet=null;window.scrollTo(0,0);break;
     case 'rs':U.rs=id;break;
     case 'mk':U.mk=id;break;
@@ -2252,6 +2359,7 @@ function boot(data){
     else if(id.startsWith('f-')){U.f[id.slice(2)]=e.target.value;render();}
   });
   window.claude?.hot?.snapshot?.(()=>({S}));
+  window.addEventListener('resize',()=>tourPlace());window.addEventListener('scroll',()=>{if(U.tour)tourPlace();},{passive:true});
   if(S.live)U.mv={seg:'feed',spd:0,lines:false};
   render();
 }
@@ -2349,7 +2457,7 @@ function liveInfo(L){
     const me=L.h===S.user?0:1,w=L.sc[me]>L.sc[1-me];
     top=`<section class="card ${w?'':'hl'}"><h2>${w?'Победа':'Поражение'}<span>${L.sc[0]}:${L.sc[1]}${L.so?' Б':L.ot?' ОТ':''}</span></h2><button class="btn pri" data-a="lend">Завершить матч</button></section>`;
   }
-  return top+seg+(U.mv.seg==='feed'?`<section class="card">${feedHTML(L.ev,L.h,L.a)}</section>`:boxView(mkBox(L),true));
+  return (L.pause||L.done?'':hint('live'))+top+seg+(U.mv.seg==='feed'?`<section class="card">${feedHTML(L.ev,L.h,L.a)}</section>`:boxView(mkBox(L),true));
 }
 function matchView(){
   const L=S.live,h=T(L.h),a=T(L.a),run=!!_timer;
