@@ -21,6 +21,12 @@
 .gp-num{display:inline-grid;place-items:center;min-width:30px;height:24px;border-radius:6px;background:var(--ink);color:var(--surface);font:700 14px var(--fm);padding:0 4px}
 @keyframes gpin{from{transform:translateY(-14px) scale(.96);opacity:0}to{transform:none;opacity:1}}
 .mv{position:fixed}
+
+.wn{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:10px}
+.wn-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.wn-h b{font:800 15px var(--fd)}
+.wn-h small{color:var(--muted);font:500 12px var(--fm)}
+.wn ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:14px}
 </style>
 <style>
 /* Layout: one-column phone app. Scoreboard header on top, scrolling content, tab bar pinned to the bottom. */
@@ -1685,6 +1691,32 @@ function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
 function load(){try{const s=localStorage.getItem(KEY);if(s){const o=JSON.parse(s);if(o&&o.v===6)return o;}}catch(e){}return null;}
 
 
+/* ---------- changelog ---------- */
+const CHANGES=[
+  {v:'2026-11-05c',d:'5 ноября',t:'Живой матч',items:[
+    'Всплывающее окно гола: кто забил, кто отдал передачи, счёт и время.',
+    'На схеме площадки у игроков номера, у вратарей — пунктирная обводка.',
+    'Игроки двигаются плавно и по хоккейным схемам: цикл в углу, перегрузка, бросок от синей, атака втроём, два в одного, выход из зоны, ловушка 1-2-2, большинство 1-3-1 и «зонтик», ромб в меньшинстве, 3 на 3 в овертайме, вбрасывания.',
+    'Попадания в штангу — около двух за матч, со своим звуком.',
+    'Мягкий звук удара клюшки по шайбе вместо щелчков.']},
+  {v:'2026-11-05b',d:'5 ноября',t:'Звук и навигация',items:[
+    'Фанфары и аплодисменты на гол, свисток, тихая музыка во время матча. Всё выключается в меню «⋯».',
+    'Лента новостей с фильтрами: мой клуб, трансферы, травмы, финансы.',
+    'Сводка «Пока шли матчи» после промотки дней.',
+    'Карточка любого клуба с полным составом: нажмите на клуб в таблицах или откройте «Лига» → «Клубы».',
+    'Поиск игроков по клубу и фильтры для свободных агентов.']},
+  {v:'2026-11-04',d:'4 ноября',t:'Обучение',items:[
+    'Короткий тур по игре для новичков.',
+    'Подсказки при первом знакомстве с каждой механикой.',
+    'Раздел «Как играть» со словарём терминов в меню «⋯».']}
+];
+const VER=CHANGES[0].v;
+function verSeen(){try{return localStorage.getItem('shaiba-ver');}catch(e){return S&&S.verSeen;}}
+function verMark(){try{localStorage.setItem('shaiba-ver',VER);}catch(e){}if(S)S.verSeen=VER;}
+function sheetWhatsNew(){
+  return `<div class="stack"><h3>Что нового</h3>${CHANGES.slice(0,3).map(c=>`<div class="wn"><div class="wn-h"><b>${c.t}</b><small>${c.d}</small></div><ul>${c.items.map(x=>`<li>${x}</li>`).join('')}</ul></div>`).join('')}<button class="btn pri" data-a="close">Играть</button></div>`;
+}
+
 /* ---------- onboarding ---------- */
 const TOUR=[
   {t:null,title:'Добро пожаловать, генеральный менеджер!',text:'Вы управляете хоккейным клубом: собираете состав, подписываете контракты, меняетесь с другими клубами и следите за деньгами. Матчи играют сами, ваша работа — решения. Покажу главное за минуту.',first:true},
@@ -2374,6 +2406,7 @@ function sheetHelp(){
 function sheetMenu(){
   return `<div class="stack"><h3>Меню</h3><p class="sub">Игра сохраняется автоматически на этом устройстве.</p>
   <div class="seg"><button data-a="sndOn" aria-pressed="${SND.on}">Звуки ${SND.on?'вкл':'выкл'}</button><button data-a="ambOn" aria-pressed="${SND.amb&&SND.on}" ${SND.on?'':'disabled'}>Музыка в матче ${SND.amb?'вкл':'выкл'}</button></div>
+  <button class="btn" data-a="wn">Что нового</button>
   <button class="btn" data-a="help">Как играть</button><button class="btn" data-a="tourAgain">Пройти обучение заново</button><button class="btn" data-a="hintsReset">Показать подсказки снова</button>
   ${U.confirm==='new'?`<p class="warn">Текущий прогресс будет удалён. Начать заново?</p><button class="btn pri" data-a="newYes">Да, новая игра</button>`:`<button class="btn" data-a="newGame">Новая игра</button>`}
   <button class="btn" data-a="close">Закрыть</button></div>`;
@@ -2398,6 +2431,7 @@ function render(){
     else if(s.type==='preview')inner=sheetPreview(T(s.id));
     else if(s.type==='menu')inner=sheetMenu();
     else if(s.type==='help')inner=sheetHelp();
+    else if(s.type==='wn')inner=sheetWhatsNew();
     else if(s.type==='team')inner=sheetTeam(T(s.id));
     else if(s.type==='digest')inner=sheetDigest(s.from);
     else if(s.type==='box')inner=S.box[s.i]?`<div class="stack">${boxView(S.box[s.i],false)}</div>`:'';
@@ -2444,6 +2478,7 @@ function act(a,id){
     case 'tourSkip':U.tour=null;S.tutDone=true;break;
     case 'tourAgain':U.sheet=null;tourStart();window.scrollTo(0,0);break;
     case 'help':U.sheet={type:'help'};break;
+    case 'wn':U.sheet={type:'wn'};verMark();break;
     case 'seen':S.seen=S.seen||{};S.seen[id]=true;U.keepSheet=true;break;
     case 'hintsReset':S.seen={};U.sheet=null;toast('Подсказки снова будут появляться.');break;
     case 'tab':U.tab=id;U.sheet=null;window.scrollTo(0,0);break;
@@ -2561,6 +2596,8 @@ function boot(data){
   window.claude?.hot?.snapshot?.(()=>({S}));
   window.addEventListener('resize',()=>tourPlace());window.addEventListener('scroll',()=>{if(U.tour)tourPlace();},{passive:true});
   if(S.live)U.mv={seg:'feed',spd:0,lines:false};
+  if(S.user!=null&&!S.live&&verSeen()!==VER){U.sheet={type:'wn'};}
+  verMark();
   render();
 }
 
