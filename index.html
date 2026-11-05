@@ -8,7 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Unbounded:wght@600;800&display=swap">
-<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font-size:14px}img{max-width:100%}[hidden]{display:none!important}</style>
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font-size:14px}img{max-width:100%}[hidden]{display:none!important}.feed li.post div{color:var(--warn)}
+</style>
 <style>
 /* Layout: one-column phone app. Scoreboard header on top, scrolling content, tab bar pinned to the bottom. */
 :root{
@@ -1096,7 +1097,7 @@ function stepTick(L){
     }
   }
   const n=[L.pen[0].length,L.pen[1].length],ice=[onIce(L,X,0),onIce(L,X,1)],sr=[0,0];
-  let shot=null,goal=null;
+  let shot=null,goal=null,post=null;
   for(const k of [0,1]){
     if(L.done)break;
     let s,g,pp=false;
@@ -1116,13 +1117,16 @@ function stepTick(L){
       if(pp)L.pen[1-k].shift();
       evAdd(L,'goal',k,`Гол! ${nm(M.get(sid))}${as.length?` (${as.map(i=>M.get(i).l).join(', ')})`:''}${pp?', в большинстве':n[k]>n[1-k]?', в меньшинстве':''} · ${L.sc[0]}:${L.sc[1]}`);
       if(ot){L.done=true;L.ot=true;}
+    }else if(R()<.035){
+      post=k;lstat(L,sid,k).sh--;L.psh[L.per-1][k]--;L.gk[1-k].sa--;
+      evAdd(L,'post',k,`Штанга! Бросал ${nm(M.get(sid))}`);
     }
   }
   for(const k of [0,1]){L.pen[k].forEach(p=>p.left--);L.pen[k]=L.pen[k].filter(p=>p.left>0);ice[k].forEach(i=>lstat(L,i,k).toi++);}
   const poss=shot!=null?shot:(R()<sr[0]/(sr[0]+sr[1]||1)?0:1);
   const zone=shot!=null?'off':R()<.42?'off':R()<.55?'neu':'def';
   if(zone==='off')L.zt[poss]++;
-  L.vis={poss,zone,shot,goal};
+  L.vis={poss,zone,shot,goal,post};
   L.tick++;
   if(L.done)return endLive(L);
   if(!ot&&L.tick%TPP===0){
@@ -1770,6 +1774,11 @@ function brass(out,f,t,dur,v){
     o.connect(lp);lp.connect(g);g.connect(out);env(g,t,.03,dur*.7,dur*.5,v);o.start(t);o.stop(t+dur*1.3+.05);
   });
 }
+function soft(out,t,a,len,v,type,f,q){
+  const ac=AC,n=ac.createBufferSource(),fl=ac.createBiquadFilter(),g=ac.createGain();
+  n.buffer=noiseBuf(ac);fl.type=type;fl.frequency.value=f;fl.Q.value=q;n.connect(fl);fl.connect(g);g.connect(out);
+  g.gain.setValueAtTime(.0001,t);g.gain.linearRampToValueAtTime(v,t+a);g.gain.exponentialRampToValueAtTime(.0001,t+a+len);n.start(t,Math.random()*1.5);n.stop(t+a+len+.02);
+}
 function applause(out,t,dur,dens,v){
   const n=Math.round(dur*dens);
   for(let i=0;i<n;i++){const x=i/n,tt=t+x*dur+Math.random()*.03,amp=v*(x<.15?x/.15:1-(x-.15)/.85*.9);
@@ -1788,12 +1797,19 @@ function sfx(k){
     o.type='sine';o.frequency.value=2950;l.frequency.value=32;lg.gain.value=120;l.connect(lg);lg.connect(o.frequency);o.connect(g);g.connect(out);
     env(g,t,.015,.45,.12,.12);o.start(t);l.start(t);o.stop(t+.7);l.stop(t+.7);
   }else if(k==='shot'){
-    burst(out,t,.018,.6,'highpass',2500,.7);
-    blip(out,t,1400,700,.03,.08,'triangle');
-    blip(out,t,160,70,.05,.18,'sine');
+    out.gain.value=.35;
+    soft(out,t,.004,.05,.22,'bandpass',1250,1.6);
+    soft(out,t,.003,.035,.12,'bandpass',2600,2.5);
+    blip(out,t,320,190,.06,.07,'triangle');
   }else if(k==='save'){
-    burst(out,t,.06,.35,'lowpass',650,.8);
-    blip(out,t,140,60,.09,.22,'sine');
+    out.gain.value=.35;
+    soft(out,t,.006,.09,.25,'lowpass',520,.7);
+    blip(out,t,120,70,.1,.12,'sine');
+  }else if(k==='post'){
+    out.gain.value=.3;
+    [[1180,1.1,.07],[2720,.7,.04],[3950,.45,.025],[5300,.3,.015]].forEach(([f,d,v])=>{const o=ac.createOscillator(),g=ac.createGain();o.type='sine';o.frequency.value=f;o.connect(g);g.connect(out);g.gain.setValueAtTime(.0001,t);g.gain.linearRampToValueAtTime(v,t+.004);g.gain.exponentialRampToValueAtTime(.0001,t+d);o.start(t);o.stop(t+d+.05);});
+    soft(out,t,.002,.03,.12,'highpass',3000,.7);
+    applause(out,t+.15,.9,10,.05);
   }else if(k==='sign'||k==='win'){
     [[523.3,0],[659.3,.09],[784,.18],[1046.5,.27]].forEach(([f,o])=>brass(out,f,t+o,.22,k==='win'?.05:.035));
     if(k==='win')applause(out,t+.15,1.8,40,.18);
@@ -2539,7 +2555,7 @@ function startTimer(){stopTimer();const L=S.live;if(!L||L.done||L.pause)return;_
 function liveTick(){
   const L=S.live;if(!L||L.done||L.pause){stopTimer();save();render();return;}
   const wasP=L.pause;stepTick(L);
-  if(L.vis&&L.vis.goal!=null){tgHaptic('goal');sfx('shot');setTimeout(()=>sfx('goal'),90);}else if(L.vis&&L.vis.shot!=null){sfx('shot');setTimeout(()=>sfx('save'),110);}
+  if(L.vis&&L.vis.goal!=null){tgHaptic('goal');sfx('shot');setTimeout(()=>sfx('goal'),90);}else if(L.vis&&L.vis.post!=null){sfx('shot');setTimeout(()=>sfx('post'),70);}else if(L.vis&&L.vis.shot!=null){sfx('shot');setTimeout(()=>sfx('save'),120);}
   if(L.pause&&!wasP)sfx('whistle');
   if(L.done){sfx('whistle');const me=L.h===S.user?0:1;setTimeout(()=>sfx(L.sc[me]>L.sc[1-me]?'win':'loss'),700);}
   if(L.done||L.pause){stopTimer();save();render();}else updateLive();
@@ -2570,7 +2586,7 @@ function positions(L){
   pos[0][5]=[15,45+(py-45)*.22];pos[1][5]=[185,45+(py-45)*.22];
   const hid=[hiddenIdx(L,0),hiddenIdx(L,1)];
   let puck=[pos[k][0][0]+d*2.5,pos[k][0][1]+1.5];
-  if(v.shot!=null){const s=v.shot,gx=s===0?189:11;puck=v.goal===s?[s===0?192:8,45+(R()-.5)*4]:[gx+(s===0?-5:5),45+(R()-.5)*12];}
+  if(v.shot!=null){const s=v.shot,gx=s===0?189:11;puck=v.goal===s?[s===0?192:8,45+(R()-.5)*4]:v.post===s?[s===0?189:11,R()<.5?42:48]:[gx+(s===0?-5:5),45+(R()-.5)*12];}
   return {pos,puck,hid};
 }
 function rinkSVG(L){
