@@ -526,8 +526,8 @@ function newPlayer(pos,target,age,natArg){
 /* positions: primary + optional second (adjacent) position; defencemen have a side */
 function rollPos2(p){
   p.pos2=null;if(p.pos==='G')return;
-  if(p.pos==='D'){p.sd=R()<.52?'L':'R';if(R()<.15)p.pos2=p.sd==='L'?'RD':'LD';return;}
-  if(R()<.35)p.pos2=pick(['C','LW','RW'].filter(x=>x!==p.pos));
+  if(p.pos==='D'){p.sd=R()<.5?'L':'R';if(R()<.3)p.pos2=p.sd==='L'?'RD':'LD';return;}
+  if(R()<.3)p.pos2=pick(['C','LW','RW'].filter(x=>x!==p.pos));
 }
 const pos1=p=>p.pos==='D'?(p.sd==='R'?'RD':'LD'):p.pos;
 const posT=p=>POS[pos1(p)]+(p.pos2?'/'+POS1[p.pos2]:'');
@@ -590,6 +590,7 @@ function newWorld(){
   S.teams.forEach(t=>{
     const q=ri(-4,4);
     for(const pos in TMPL)TMPL[pos].forEach(v=>{const p=newPlayer(pos,v+q,undefined,pickW(TNW[t.nat]));p.team=t.id;uniqName(p,t.id);contract(p,.85+R()*.5);S.players.push(p);});
+    const ds=S.players.filter(p=>p.team===t.id&&p.pos==='D').sort(byOvr);const s0=R()<.5;ds.forEach((p,k)=>{p.sd=(k%2===0)===s0?'L':'R';if(p.pos2)p.pos2=p.sd==='L'?'RD':'LD';});
     fitCap(t.id,S.cap-ri(2000,9000));
   });
   topUpFA(45);genPool();makePicks(S.season+1);makePicks(S.season+2);S.players.forEach(p=>{if(p.team===-1)setAsk(p);});
@@ -609,10 +610,10 @@ function eff(p,slot){
   if(slot==='D'||slot==='LD'||slot==='RD'){
     if(p.pos!=='D')return p.ovr-10;
     if(slot==='D')return p.ovr;
-    return slot===pos1(p)?p.ovr:slot===p.pos2?p.ovr-1:p.ovr-3;
+    return slot===pos1(p)||slot===p.pos2?p.ovr:p.ovr-3;
   }
   if(p.pos==='D')return p.ovr-8;
-  return slot===p.pos?p.ovr:slot===p.pos2?p.ovr-1:p.ovr-6;
+  return slot===p.pos||slot===p.pos2?p.ovr:p.ovr-6;
 }
 /* 0 = own or second position, 1 = other position in the same group, 2 = other group */
 function ptier(p,slot){
@@ -837,12 +838,12 @@ function aiCover(){
   S.teams.forEach(t=>{
     if(t.id===S.user)return;
     const h=healthy(t.id),f=h.filter(p=>grpOf(p)==='F').length,d=h.filter(p=>p.pos==='D').length,g=h.filter(p=>p.pos==='G').length;
-    const need=g<2?'G':d<6?'D':f<12?'F':null;if(!need)return;
+    const c=posCover(h),need=g<2?'G':d<6?(c.LD<=c.RD?'LD':'RD'):f<12?['C','LW','RW'].sort((a,b)=>c[a]-c[b])[0]:null;if(!need)return;
     const lt=active(t.id).filter(p=>p.inj>=10).sort((a,b)=>b.inj-a.inj)[0];
     if(!lt&&rcount(t.id)>=26)return;
     const room=S.cap-payroll(t.id);
-    let fa=S.players.filter(p=>p.team===-1&&grpOf(p)===need&&p.ask<=room).sort(byOvr)[0];
-    if(!fa){fa=newPlayer(need==='F'?pick(['C','LW','RW']):need,ri(52,57),ri(24,31),pickW(TNW[t.nat]));S.players.push(fa);fa.ask=minSal();}
+    let fa=S.players.filter(p=>p.team===-1&&fitsPos(p,[need])&&p.ask<=room).sort(byOvr)[0];
+    if(!fa){fa=newAt(need,ri(52,57),ri(24,31),pickW(TNW[t.nat]));S.players.push(fa);fa.ask=minSal();}
     fa.team=t.id;fa.sal=Math.min(fa.ask,Math.max(minSal(),room));fa.yrs=1;fa.faY=0;if(lt)fa.temp=lt.id;uniqName(fa,t.id);
   });
 }
@@ -1077,9 +1078,30 @@ function acceptOffer(id){
   S.offers=S.offers.filter(x=>x!==o&&!offerIssue(x));
   toast('Сделка закрыта!');
 }
-function needPos(tid){
-  const r=active(tid),g=r.filter(p=>p.pos==='G').length,d=r.filter(p=>p.pos==='D').length;
-  return g<2?['G']:d<7?['D']:['C','LW','RW'];
+/* roster depth by position: own position counts 1, a two-position player .6 for each */
+const PKEYS=['C','LW','RW','LD','RD'],PTGT={C:4.5,LW:4.5,RW:4.5,LD:3.5,RD:3.5};
+function posCover(list){
+  const c={C:0,LW:0,RW:0,LD:0,RD:0,G:0};
+  list.forEach(p=>{if(p.pos==='G'){c.G++;return;}const a=pos1(p);if(p.pos2){c[a]+=.6;c[p.pos2]+=.6;}else c[a]++;});
+  return c;
+}
+const fitsPos=(p,keys)=>keys.some(k=>k==='G'?p.pos==='G':p.pos!=='G'&&ptier(p,k)===0);
+function newAt(key,target,age,nat){const p=newPlayer(key==='LD'||key==='RD'?'D':key,target,age,nat);if(p.pos==='D'){p.sd=key==='RD'?'R':'L';if(p.pos2)p.pos2=p.sd==='L'?'RD':'LD';}return p;}
+/* positions the club is short of, most urgent first */
+function needPos(tid,list){
+  const r=list||active(tid),c=posCover(r);
+  if(c.G<2)return ['G'];
+  const sh=PKEYS.map(k=>[k,PTGT[k]-c[k]]).filter(x=>x[1]>.3).sort((a,b)=>b[1]-a[1]).map(x=>x[0]);
+  if(sh.length)return sh;
+  const d=r.filter(p=>p.pos==='D').length;
+  return d<7?['LD','RD']:['C','LW','RW'];
+}
+/* would losing this player leave a hole at his position? */
+function critical(p,tid){
+  const r=active(tid);
+  if(p.pos==='G')return r.filter(q=>q.pos==='G').length<=2;
+  const c=posCover(r.filter(q=>q.id!==p.id));
+  return [pos1(p),p.pos2].filter(Boolean).some(k=>c[k]<PTGT[k]-1.5);
 }
 const gmLim=tid=>T(tid).own==='acct'?S.cap*.88:S.cap;
 const natB=(p,tid)=>{if(tid==null)return 0;const n=T(tid).nat;return n!=='RUS'&&p.nat===n?4:n==='CHN'&&(p.nat==='CAN'||p.nat==='USA')?2:0;};
@@ -1097,8 +1119,9 @@ function aiFA(target){
     let guard=0;
     while(rcount(tid)<target&&guard++<10){
       const room=lim-payroll(tid),need=needPos(tid);
-      const fa=S.players.filter(p=>p.team===-1&&need.includes(p.pos)&&p.ask<=room).sort((a,b)=>gmSc(b,own,tid)-gmSc(a,own,tid))[0];
-      if(!fa){const p=newPlayer(need[0]==='G'?'G':need[0]==='D'?'D':pick(['C','LW','RW']),ri(52,58),ri(24,31),pickW(TNW[T(tid).nat]));p.team=tid;p.sal=minSal();p.yrs=1;uniqName(p,tid);S.players.push(p);continue;}
+      const sc=p=>gmSc(p,own,tid)+(fitsPos(p,[need[0]])?2:0);
+      const fa=S.players.filter(p=>p.team===-1&&fitsPos(p,need)&&p.ask<=room).sort((a,b)=>sc(b)-sc(a))[0];
+      if(!fa){const p=newAt(need[0],ri(52,58),ri(24,31),pickW(TNW[T(tid).nat]));p.team=tid;p.sal=minSal();p.yrs=1;uniqName(p,tid);S.players.push(p);continue;}
       aiSign(fa,tid);
     }
   });
@@ -1108,13 +1131,13 @@ function tInfo(){
   if(_ti)return _ti;_ti={};
   S.teams.forEach(t=>{if(t.id===S.user)return;const h=healthy(t.id),th={};
     [['F',9],['D',5],['G',1]].forEach(([g,n])=>{const a=h.filter(q=>grpOf(q)===g).sort(byOvr);th[g]=a[n]?a[n].ovr:0;});
-    _ti[t.id]={room:gmLim(t.id)-payroll(t.id),rc:rcount(t.id),th};});
+    _ti[t.id]={room:gmLim(t.id)-payroll(t.id),rc:rcount(t.id),th,nd:needPos(t.id)};});
   return _ti;
 }
 function interest(p){
   if(p.team!==-1)return [];
   const ti=tInfo();
-  return S.teams.filter(t=>{const x=ti[t.id];return x&&x.room>=p.ask&&x.rc<26&&gmSc(p,t.own)>x.th[grpOf(p)];});
+  return S.teams.filter(t=>{const x=ti[t.id];return x&&x.room>=p.ask&&x.rc<26&&gmSc(p,t.own)+(fitsPos(p,x.nd)?4:0)>x.th[grpOf(p)];});
 }
 function faMarketDay(d){
   const fas=S.players.filter(p=>p.team===-1).sort(byOvr);
@@ -1122,7 +1145,8 @@ function faMarketDay(d){
   teams.forEach(tid=>{
     if(R()>(d<=2?.55:.35))return;
     const own=T(tid).own,room=gmLim(tid)-payroll(tid);if(rcount(tid)>=24)return;
-    const c=fas.filter(p=>p.team===-1&&p.ask<=room).filter(p=>{const g=healthy(tid).filter(q=>grpOf(q)===grpOf(p)).sort(byOvr),n=grpOf(p)==='F'?9:grpOf(p)==='D'?5:1;return !g[n]||gmSc(p,own,tid)>g[n].ovr;}).sort((a,b)=>gmSc(b,own,tid)-gmSc(a,own,tid));
+    const nd=needPos(tid),nb=p=>fitsPos(p,nd)?4:0;
+    const c=fas.filter(p=>p.team===-1&&p.ask<=room).filter(p=>{const g=healthy(tid).filter(q=>grpOf(q)===grpOf(p)).sort(byOvr),n=grpOf(p)==='F'?9:grpOf(p)==='D'?5:1;return !g[n]||gmSc(p,own,tid)+nb(p)>g[n].ovr;}).sort((a,b)=>gmSc(b,own,tid)+nb(b)-gmSc(a,own,tid)-nb(a));
     if(c.length)aiSign(c[d<=2?0:ri(0,Math.min(2,c.length-1))],tid);
   });
   if(d>=3)S.players.forEach(p=>{if(p.team===-1)p.ask=Math.max(rs(fair(p.ovr)*.6),rs(p.ask*.97));});
@@ -1136,8 +1160,8 @@ function seasonFA(){
     if(R()<Math.min(.06,.012*it.length))aiSign(p,pick(it).id);
   });
 }
-function aiTrim(){S.teams.forEach(t=>{if(t.id===S.user)return;let r=active(t.id);while(r.length>26){toFA(r.slice().sort((a,b)=>value(a)-value(b))[0]);r=active(t.id);}});}
-function aiCapFix(){S.teams.forEach(t=>{if(t.id===S.user)return;let g=0;while(payroll(t.id)>S.cap&&g++<6){const w=active(t.id).filter(p=>!p.ltir).sort((a,b)=>(value(a)/Math.max(1,a.sal))-(value(b)/Math.max(1,b.sal)))[0];if(!w)break;toFA(w);}});}
+function aiTrim(){S.teams.forEach(t=>{if(t.id===S.user)return;let r=active(t.id);while(r.length>26){const o=r.slice().sort((a,b)=>value(a)-value(b));toFA(o.find(p=>!critical(p,t.id))||o[0]);r=active(t.id);}});}
+function aiCapFix(){S.teams.forEach(t=>{if(t.id===S.user)return;let g=0;while(payroll(t.id)>S.cap&&g++<6){const o=active(t.id).filter(p=>!p.ltir).sort((a,b)=>(value(a)/Math.max(1,a.sal))-(value(b)/Math.max(1,b.sal))),w=o.find(p=>!critical(p,t.id))||o[0];if(!w)break;toFA(w);}});}
 const elc=p=>p.pickN&&p.pickN<=32?rs((950-(p.pickN-1)*5)*infl()):rs(800*infl());
 function signR(p,tid){p.team=tid;p.yrs=3;p.sal=elc(p);p.acc=3;p.faY=0;delete p.rights;delete p.rY;}
 function aiRights(){
@@ -1560,7 +1584,7 @@ function startOffseason(){
       p.yrs=0;
       if(p.team===S.user&&!S.fired){setAsk(p);p.exp=true;}
       else{
-        const loyal=T(p.team).own==='loyal',pr=loyal?.85:.62,lim=T(p.team).own==='acct'?S.cap*.9:S.cap;
+        const loyal=T(p.team).own==='loyal',pr=critical(p,p.team)?.92:loyal?.85:.62,lim=T(p.team).own==='acct'?S.cap*.9:S.cap;
         if(R()<pr&&payroll(p.team)+fair(p.ovr)<=lim)contract(p,loyal?.85+R()*.15:.9+R()*.25);
         else toFA(p);
       }
@@ -1781,6 +1805,12 @@ function load(){try{const s=localStorage.getItem(KEY);if(s){const o=JSON.parse(s
 
 /* ---------- changelog ---------- */
 const CHANGES=[
+  {v:'2026-11-05f',d:'5 ноября',t:'Вторая позиция без штрафа',items:[
+    'На второй позиции игроки играют без штрафа.',
+    'Играть на обеих сторонах теперь могут 30% защитников (было 15%), на двух позициях — 30% нападающих.',
+    'В стартовых составах левых и правых защитников поровну.',
+    'Клубы ИИ подписывают игроков под конкретные дыры: не хватает правого защитника — ищут правого.',
+    'ИИ не отчисляет последнего игрока на позиции, когда сокращает состав или освобождает место под потолком.']},
   {v:'2026-11-05e',d:'5 ноября',t:'Позиции и звенья',items:[
     'У части нападающих теперь две позиции: ЛН/Ц, ПН/Ц, ЛН/ПН. На второй позиции штраф всего −1, на чужой −6.',
     'Защитники делятся на левых и правых (ЛЗ, ПЗ). Не на своей стороне −3, некоторые играют на обеих.',
@@ -2193,7 +2223,7 @@ function viewLines(){
   const out=active(S.user).filter(p=>p.inj||p.camp);
   return hint('lines')+`<section class="card"><div class="kv"><div><small>Нападение</small><b>${r.f.toFixed(1)}</b></div><div><small>Защита</small><b>${r.d.toFixed(1)}</b></div><div><small>Итог</small><b>${r.t.toFixed(1)}</b></div></div>
   <div class="kv two"><div><small>Бригада большинства</small><b>${u.pp.toFixed(1)}</b></div><div><small>Бригада меньшинства</small><b>${u.pk.toFixed(1)}</b></div></div>
-  <p class="small muted">Нажмите на позицию, чтобы поставить другого игрока. У части игроков есть вторая позиция (например, ЛН/Ц): на ней −1. Чужая позиция в нападении −6, защитник не на своей стороне −3, нападающий в защите −10. Идеальная тройка — снайпер, плеймейкер и двусторонний; идеальная пара — атакующий и оборонительный.</p>
+  <p class="small muted">Нажмите на позицию, чтобы поставить другого игрока. У части игроков есть вторая позиция (например, ЛН/Ц): на ней играют без штрафа. Чужая позиция в нападении −6, защитник не на своей стороне −3, нападающий в защите −10. Идеальная тройка — снайпер, плеймейкер и двусторонний; идеальная пара — атакующий и оборонительный.</p>
   <p class="small"><b>Собрать автоматически</b> — всегда сначала по позициям:</p>
   <div class="btn-row wrap"><button class="btn sm" data-a="autoLines" data-id="best">Сильнейшие</button><button class="btn sm" data-a="autoLines" data-id="combo">Связки ролей</button><button class="btn sm" data-a="autoLines" data-id="keep">Сохранить сыгранность</button></div></section>
   ${L.f.map((l,i)=>`<section class="card"><div class="lineh"><b>${i+1}-е звено</b><span>${r.lines[i].toFixed(1)} · вес ${FW_LW[i]}</span></div><div class="slots">${[0,1,2].map(j=>slot('f',i,j)).join('')}</div>${chem(l,'f')}</section>`).join('')}
