@@ -1,0 +1,27 @@
+name: Объявление в Telegram
+
+on:
+  push:
+    branches: [main]
+    paths: ['announce/latest.txt']
+  workflow_dispatch:
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Отправить пост в канал
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHANNEL: ${{ secrets.TG_CHANNEL }}
+        run: |
+          if [ -z "$TG_BOT_TOKEN" ] || [ -z "$TG_CHANNEL" ]; then
+            echo "Секреты TG_BOT_TOKEN и TG_CHANNEL не заданы — пост не отправлен."
+            exit 0
+          fi
+          resp=$(curl -sS -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TG_CHANNEL}" \
+            --data-urlencode "text@announce/latest.txt" \
+            -d "disable_web_page_preview=true")
+          echo "$resp" | grep -q '"ok":true' && echo "Пост опубликован." || { echo "Telegram ответил: $resp" | sed 's/bot[0-9]*:[A-Za-z0-9_-]*/bot***/g'; exit 1; }
