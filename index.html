@@ -28,6 +28,7 @@
 .wn-h small{color:var(--muted);font:500 12px var(--fm)}
 .wn ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:14px}
 .pick-hero .hero-sub{margin-top:4px;color:var(--board-ink);font:600 13px var(--fb);letter-spacing:.14em;text-transform:uppercase;opacity:.75}
+.pos i{font-style:normal;font-size:9px;opacity:.7;letter-spacing:0}
 </style>
 <style>
 /* Layout: one-column phone app. Scoreboard header on top, scrolling content, tab bar pinned to the bottom. */
@@ -419,8 +420,8 @@ const TNW={
 const OSW=[['CAN',25],['USA',20],['SWE',12],['FIN',12],['CZE',10],['SVK',6],['LAT',5],['SUI',4],['GER',4],['DEN',2]];
 const NAT={CHN:'КИТ',CAN:'КАН',USA:'США',RUS:'РОС',SWE:'ШВЕ',FIN:'ФИН',CZE:'ЧЕХ',SVK:'СЛК',GER:'ГЕР',SUI:'ШВЦ',LAT:'ЛАТ',BLR:'БЛР',KAZ:'КАЗ',DEN:'ДАН'};
 const NAT_FULL={CHN:'Китай',CAN:'Канада',USA:'США',RUS:'Россия',SWE:'Швеция',FIN:'Финляндия',CZE:'Чехия',SVK:'Словакия',GER:'Германия',SUI:'Швейцария',LAT:'Латвия',BLR:'Беларусь',KAZ:'Казахстан',DEN:'Дания'};
-const POS={C:'Ц',LW:'ЛН',RW:'ПН',D:'З',G:'В'};
-const POS_FULL={C:'Центральный нападающий',LW:'Левый нападающий',RW:'Правый нападающий',D:'Защитник',G:'Вратарь'};
+const POS={C:'Ц',LW:'ЛН',RW:'ПН',D:'З',G:'В',LD:'ЛЗ',RD:'ПЗ'},POS1={C:'Ц',LW:'Л',RW:'П',LD:'Л',RD:'П'};
+const POS_FULL={C:'Центральный нападающий',LW:'Левый нападающий',RW:'Правый нападающий',D:'Защитник',G:'Вратарь',LD:'Левый защитник',RD:'Правый защитник'};
 const ROLES={SN:'Снайпер',PM:'Плеймейкер',TW:'Двусторонний',UN:'Универсал',OF:'Атакующий',DF:'Оборонительный'};
 const ROLE_S={SN:'Снайп.',PM:'Плейм.',TW:'Двуст.',UN:'Унив.',OF:'Атак.',DF:'Оборон.'};
 const ROLE_D={SN:'Чаще забивает, сильнее в большинстве.',PM:'Чаще отдаёт передачи, сильнее в большинстве.',TW:'Усиливает защиту звена и игру в меньшинстве.',UN:'Сочетается с любым партнёром по паре.',OF:'Больше очков, усиливает большинство.',DF:'Надёжнее в обороне и в меньшинстве.'};
@@ -519,8 +520,20 @@ function newPlayer(pos,target,age,natArg){
   let pot=ovr;
   if(age<=26)pot=clamp(ovr+ri(age<=24?2:0,Math.max(3,4+(26-age)*2.6)),ovr,96);
   const nat=natArg||pickNat();
-  return {id:S.nid++,f:pick(NM[nat][0]),l:pick(NM[nat][1]),nat,pos,role:rollRole(pos),age,ovr,pot,sal:0,yrs:0,team:-1,gp:0,g:0,a:0,pim:0,ppg:0,gsa:0,gga:0,gw:0,gso:0,ask:0,askY:1,exp:false,perf:0,lastD:null,faY:0};
+  const p={id:S.nid++,f:pick(NM[nat][0]),l:pick(NM[nat][1]),nat,pos,role:rollRole(pos),age,ovr,pot,sal:0,yrs:0,team:-1,gp:0,g:0,a:0,pim:0,ppg:0,gsa:0,gga:0,gw:0,gso:0,ask:0,askY:1,exp:false,perf:0,lastD:null,faY:0};
+  rollPos2(p);return p;
 }
+/* positions: primary + optional second (adjacent) position; defencemen have a side */
+function rollPos2(p){
+  p.pos2=null;if(p.pos==='G')return;
+  if(p.pos==='D'){p.sd=R()<.52?'L':'R';if(R()<.15)p.pos2=p.sd==='L'?'RD':'LD';return;}
+  if(R()<.35)p.pos2=pick(['C','LW','RW'].filter(x=>x!==p.pos));
+}
+const pos1=p=>p.pos==='D'?(p.sd==='R'?'RD':'LD'):p.pos;
+const posT=p=>POS[pos1(p)]+(p.pos2?'/'+POS1[p.pos2]:'');
+const posFull=p=>POS_FULL[pos1(p)]+(p.pos2?', может играть '+({C:'в центре',LW:'слева',RW:'справа',LD:'слева',RD:'справа'})[p.pos2]:'');
+const posB=p=>`<span class="pos ${p.pos}">${POS[pos1(p)]}${p.pos2?`<i>/${POS1[p.pos2]}</i>`:''}</span>`;
+const hasPos=(p,k)=>k==='all'||p.pos===k||p.pos2===k;
 function uniqName(p,tid){let g=0;const has=()=>S.players.some(q=>q!==p&&q.team===tid&&q.l===p.l);while(has()&&g++<20)p.l=pick(NM[p.nat][1]);}
 function contract(p,mult,yrs){
   let s=fair(p.ovr)*mult;
@@ -593,14 +606,27 @@ function eff(p,slot){
   if(!p)return 40;
   if(slot==='G')return p.pos==='G'?p.ovr:25;
   if(p.pos==='G')return 25;
-  if(slot==='D')return p.pos==='D'?p.ovr:p.ovr-10;
+  if(slot==='D'||slot==='LD'||slot==='RD'){
+    if(p.pos!=='D')return p.ovr-10;
+    if(slot==='D')return p.ovr;
+    return slot===pos1(p)?p.ovr:slot===p.pos2?p.ovr-1:p.ovr-3;
+  }
   if(p.pos==='D')return p.ovr-8;
-  if(p.pos===slot)return p.ovr;
-  return (p.pos==='C'||slot==='C')?p.ovr-4:p.ovr-2;
+  return slot===p.pos?p.ovr:slot===p.pos2?p.ovr-1:p.ovr-6;
 }
+/* 0 = own or second position, 1 = other position in the same group, 2 = other group */
+function ptier(p,slot){
+  if(slot==='G')return p.pos==='G'?0:3;
+  if(p.pos==='G')return 3;
+  const dS=slot==='D'||slot==='LD'||slot==='RD';
+  if(dS!==(p.pos==='D'))return 2;
+  if(slot==='D')return 0;
+  return slot===pos1(p)||slot===p.pos2?0:1;
+}
+const strictSc=(p,sp)=>eff(p,sp)-ptier(p,sp)*40;
 const emptyLines=()=>({f:[[null,null,null],[null,null,null],[null,null,null],[null,null,null]],d:[[null,null],[null,null],[null,null]],g:[null,null]});
 const SLOTS=(()=>{const s=[['g',0,0],['g',0,1]];for(let i=0;i<4;i++){[1,0,2].forEach(j=>s.push(['f',i,j]));if(i<3)[0,1].forEach(j=>s.push(['d',i,j]));}return s;})();
-const slotPos=(k,j)=>k==='f'?SLOT_F[j]:k==='d'?'D':'G';
+const slotPos=(k,j)=>k==='f'?SLOT_F[j]:k==='d'?(j?'RD':'LD'):'G';
 const getSlot=(L,k,i,j)=>k==='g'?L.g[j]:L[k][i][j];
 function setSlot(L,k,i,j,v){if(k==='g')L.g[j]=v;else L[k][i][j]=v;}
 function fillLines(L,pool){
@@ -608,12 +634,73 @@ function fillLines(L,pool){
   SLOTS.forEach(([k,i,j])=>{
     if(getSlot(L,k,i,j)!=null)return;
     const sp=slotPos(k,j);let best=null,bs=-1;
-    for(const p of pool){if(used.has(p.id))continue;const sc=eff(p,sp)+(p.pos===sp?3:0);if(sc>bs){bs=sc;best=p;}}
+    for(const p of pool){if(used.has(p.id))continue;const sc=strictSc(p,sp);if(sc>bs){bs=sc;best=p;}}
     if(best&&eff(best,sp)>30){setSlot(L,k,i,j,best.id);used.add(best.id);}
   });
   return L;
 }
-const autoLines=tid=>fillLines(emptyLines(),healthy(tid));
+const AUTO_M={best:'Сильнейшие',combo:'Связки ролей',keep:'Сохранить сыгранность'};
+/* optimise one group (forwards 'f' or defence 'd') by local search; strict positions */
+function optGroup(L,k,pool,mode,M,lock){
+  const w=k==='f'?FW_LW:D_LW,slots=[];
+  L[k].forEach((l,i)=>{if(lock&&lock.has(i))return;l.forEach((_,j)=>slots.push([i,j]));});
+  if(!slots.length)return;
+  const lockedIds=new Set();if(lock)lock.forEach(i=>L[k][i].forEach(id=>id!=null&&lockedIds.add(id)));
+  const cand=pool.filter(p=>p.pos!=='G'&&!lockedIds.has(p.id));
+  const lineV=(l,i)=>{let v=0;l.forEach((id,j)=>{const p=id==null?null:M.get(id);v+=p?strictSc(p,slotPos(k,j)):-200;});if(mode==='combo')v+=combo(l,M,k).b*l.length*2;return v;};
+  const obj=()=>L[k].reduce((s,l,i)=>s+w[i]*lineV(l,i),0);
+  const used=new Set();
+  slots.forEach(([i,j])=>{const sp=slotPos(k,j);let best=null,bs=-1e9;for(const p of cand){if(used.has(p.id))continue;const v=strictSc(p,sp);if(v>bs){bs=v;best=p;}}L[k][i][j]=best?best.id:null;if(best)used.add(best.id);});
+  let cur=obj();
+  for(let pass=0;pass<12;pass++){
+    let imp=false;
+    for(let a=0;a<slots.length;a++){
+      const [ia,ja]=slots[a];
+      for(let b=a+1;b<slots.length;b++){
+        const [ib,jb]=slots[b],x=L[k][ia][ja],y=L[k][ib][jb];if(x===y)continue;
+        L[k][ia][ja]=y;L[k][ib][jb]=x;const v=obj();
+        if(v>cur+1e-9){cur=v;imp=true;}else{L[k][ia][ja]=x;L[k][ib][jb]=y;}
+      }
+      for(const p of cand){
+        if(used.has(p.id))continue;const x=L[k][ia][ja];
+        L[k][ia][ja]=p.id;const v=obj();
+        if(v>cur+1e-9){cur=v;imp=true;used.add(p.id);if(x!=null)used.delete(x);}else L[k][ia][ja]=x;
+      }
+    }
+    if(!imp)break;
+  }
+}
+/* order whole lines strongest first (chemistry follows the trio, so this never breaks it) */
+function sortGroup(L,k,M){
+  const v=l=>l.reduce((s,id,j)=>{const p=id==null?null:M.get(id);return s+(p?eff(p,slotPos(k,j)):0);},0)+combo(l,M,k).b*l.length+(k==='f'||k==='d'?Math.min(4,chemN(l)*.1)*l.length:0);
+  L[k]=L[k].map(l=>({l,v:v(l)})).sort((a,b)=>b.v-a.v).map(x=>x.l);
+}
+function buildLines(tid,mode,base){
+  const pool=healthy(tid),M=new Map(pool.map(p=>[p.id,p]));
+  const L=emptyLines(),info={kept:0};
+  const locks={f:new Set(),d:new Set()};
+  if(mode==='keep'&&base){
+    ['f','d'].forEach(k=>base[k].forEach((l,i)=>{
+      const ok=l.every((id,j)=>id!=null&&M.has(id)&&ptier(M.get(id),slotPos(k,j))===0);
+      if(ok&&chemN(l)>=5){L[k][i]=l.slice();locks[k].add(i);info.kept++;}
+    }));
+  }
+  const gs=pool.filter(p=>p.pos==='G').sort((a,b)=>b.ovr-a.ovr);L.g=[gs[0]?gs[0].id:null,gs[1]?gs[1].id:null];
+  optGroup(L,'d',pool,mode==='combo'?'combo':'best',M,locks.d);
+  const usedD=new Set(L.d.flat());
+  optGroup(L,'f',pool.filter(p=>!usedD.has(p.id)),mode==='combo'?'combo':'best',M,locks.f);
+  sortGroup(L,'f',M);sortGroup(L,'d',M);
+  fillLines(L,pool);
+  L.info=info;return L;
+}
+const _alc=new Map();
+function autoLines(tid,mode){
+  if(mode)return buildLines(tid,mode,tid===S.user?S.lines:null);
+  const h=healthy(tid),key=tid+':'+h.map(p=>p.id+'.'+p.ovr).join(',');
+  let L=_alc.get(key);
+  if(!L){if(_alc.size>400)_alc.clear();L=buildLines(tid,'best');_alc.set(key,L);}
+  return L;
+}
 function fixLines(){
   if(S.user==null)return;
   if(!S.lines){S.lines=autoLines(S.user);return;}
@@ -643,7 +730,7 @@ function rating(tid,L,M){
   M=M||idx();L=L||getLines(tid);
   const get=id=>id==null?null:M.get(id);
   const lines=L.f.map(l=>l.reduce((s,id,j)=>s+eff(get(id),SLOT_F[j]),0)/3+chemB(l,M,'f'));
-  const pairs=L.d.map(l=>(eff(get(l[0]),'D')+eff(get(l[1]),'D'))/2+chemB(l,M,'d')+.5*l.filter(id=>{const p=get(id);return p&&p.role==='DF';}).length);
+  const pairs=L.d.map(l=>(eff(get(l[0]),'LD')+eff(get(l[1]),'RD'))/2+chemB(l,M,'d')+.5*l.filter(id=>{const p=get(id);return p&&p.role==='DF';}).length);
   const tw=L.f.slice(0,3).flat().filter(id=>{const p=get(id);return p&&p.role==='TW';}).length;
   const f=lines.reduce((s,v,i)=>s+v*FW_LW[i],0)/4,d=pairs.reduce((s,v,i)=>s+v*D_LW[i],0)/3+Math.min(1.2,tw*.2),g=eff(get(L.g[0]),'G');
   return {f,d,g,t:.45*f+.33*d+.22*g,lines,pairs};
@@ -1438,7 +1525,7 @@ function osSign(id){
   if(payroll(S.user)+p.osSal>S.cap)return toast('Контракт не помещается под потолок.');
   p.team=S.user;p.sal=p.osSal;p.yrs=p.osY;p.faY=0;uniqName(p,S.user);
   S.players=S.players.filter(q=>q.team!==-4);U.sheet=null;
-  news(`Подписали ${full(p)} (${NAT_FULL[p.nat]}, ${POS[p.pos]}, ${p.ovr}) без драфта: ${money(p.sal)} × ${p.yrs}.`);toast(`${full(p)} в составе!`);
+  news(`Подписали ${full(p)} (${NAT_FULL[p.nat]}, ${posT(p)}, ${p.ovr}) без драфта: ${money(p.sal)} × ${p.yrs}.`);toast(`${full(p)} в составе!`);
 }
 
 /* ---------- offseason ---------- */
@@ -1529,7 +1616,7 @@ function autoDraft(){
 function userDraft(id){
   const p=P(id),D=S.draft;if(!p||p.team!==-2||!D||D.i>=D.seq.length||D.seq[D.i].own!==S.user)return;
   const eo=estO(p),e=est(p),s=D.seq[D.i];draftTo(p,s);
-  news(`Драфт №${s.n}: ${full(p)} (${POS[p.pos]}, ${roleTxt(p)}). Скауты оценивали ~${eo}/${e}, на деле ${p.ovr}/${p.pot}.`);
+  news(`Драфт №${s.n}: ${full(p)} (${posT(p)}, ${roleTxt(p)}). Скауты оценивали ~${eo}/${e}, на деле ${p.ovr}/${p.pot}.`);
   D.i++;autoDraft();
 }
 function endDraft(){
@@ -1694,6 +1781,12 @@ function load(){try{const s=localStorage.getItem(KEY);if(s){const o=JSON.parse(s
 
 /* ---------- changelog ---------- */
 const CHANGES=[
+  {v:'2026-11-05e',d:'5 ноября',t:'Позиции и звенья',items:[
+    'У части нападающих теперь две позиции: ЛН/Ц, ПН/Ц, ЛН/ПН. На второй позиции штраф всего −1, на чужой −6.',
+    'Защитники делятся на левых и правых (ЛЗ, ПЗ). Не на своей стороне −3, некоторые играют на обеих.',
+    'Три режима автосборки: «Сильнейшие», «Связки ролей», «Сохранить сыгранность». Все строго по позициям.',
+    'Звенья соперников тоже собираются по позициям.',
+    'Фильтр по позиции на рынке и в драфте учитывает вторую позицию.']},
   {v:'2026-11-05d',d:'5 ноября',t:'Новое имя',items:['Игра теперь называется «Генменеджер — хоккейный симулятор».','Окно «Что нового» после каждого обновления и в меню «⋯».']},
   {v:'2026-11-05c',d:'5 ноября',t:'Живой матч',items:[
     'Всплывающее окно гола: кто забил, кто отдал передачи, счёт и время.',
@@ -1945,8 +2038,8 @@ function pRow(p,mode){
   const pot=p.age<=26&&p.pot>p.ovr?` · пот. ${p.pot}`:'';
   const tm=p.team>=0&&p.team!==S.user?tl(T(p.team),14)+' ':'';
   return `<button class="prow${sel?' sel':''}" data-a="${mode?mode.act:'player'}" data-id="${p.id}">
-  ${mode?`<span class="tick">${sel?'✓':''}</span>`:`<span class="pos ${p.pos}">${POS[p.pos]}</span>`}
-  <span class="pn"><b>${mode?POS[p.pos]+' · ':''}${nm(p)}${pFlags(p,mode)}</b><small>${tm}${p.age} л · ${flag(p.nat)}${p.role?' · '+ROLE_S[p.role]:''}${stat}${pot}</small></span>
+  ${mode?`<span class="tick">${sel?'✓':''}</span>`:`${posB(p)}`}
+  <span class="pn"><b>${mode?posT(p)+' · ':''}${nm(p)}${pFlags(p,mode)}</b><small>${tm}${p.age} л · ${flag(p.nat)}${p.role?' · '+ROLE_S[p.role]:''}${stat}${pot}</small></span>
   <span class="ovr ${tier(p.ovr)}">${p.ovr}</span>
   <span class="money"><b>${m2}</b><small>${s2}</small></span></button>`;
 }
@@ -1996,9 +2089,9 @@ function offersCard(){
   return `<section class="card hl"><h2>Предложения клубов<span>${S.offers.length}</span></h2>${S.offers.map(o=>{
     const t=T(o.tid),want=o.want.map(P),give=o.give.map(P),gk=o.giveP.map(PK),is=offerIssue(o);
     const sIn=sum(give,p=>p.sal),sOut=sum(want,p=>p.sal);
-    const items=[...give.map(p=>`${linkBtn(p)} (${POS[p.pos]}, ${p.ovr}, ${p.age} л${p.age<=24?`, пот. ${p.pot}`:''})`),...gk.map(k=>`<b>${pickLbl(k)}</b> (${pickProj(k)})`)];
+    const items=[...give.map(p=>`${linkBtn(p)} (${posT(p)}, ${p.ovr}, ${p.age} л${p.age<=24?`, пот. ${p.pot}`:''})`),...gk.map(k=>`<b>${pickLbl(k)}</b> (${pickProj(k)})`)];
     return `<div class="offer"><div class="offer-h">${badge(t,40)}<div><b>${t.city} ${t.name}</b><small>${gmLbl(t)} · ${o.exp!=null?`до дня ${o.exp}`:'до старта сезона'}</small></div></div>
-    <p>Хотят: ${want.map(p=>`<b>${full(p)}</b> (${POS[p.pos]}, ${p.ovr}, ${p.age} л)`).join(', ')}</p>
+    <p>Хотят: ${want.map(p=>`<b>${full(p)}</b> (${posT(p)}, ${p.ovr}, ${p.age} л)`).join(', ')}</p>
     <p>Дают: ${items.join(', ')}</p>
     <p class="small muted">Зарплаты: ${sIn>=sOut?'+':'−'}${money(Math.abs(sIn-sOut))} к вашей ведомости</p>
     ${is?`<p class="small bad">${is}</p>`:''}
@@ -2100,8 +2193,9 @@ function viewLines(){
   const out=active(S.user).filter(p=>p.inj||p.camp);
   return hint('lines')+`<section class="card"><div class="kv"><div><small>Нападение</small><b>${r.f.toFixed(1)}</b></div><div><small>Защита</small><b>${r.d.toFixed(1)}</b></div><div><small>Итог</small><b>${r.t.toFixed(1)}</b></div></div>
   <div class="kv two"><div><small>Бригада большинства</small><b>${u.pp.toFixed(1)}</b></div><div><small>Бригада меньшинства</small><b>${u.pk.toFixed(1)}</b></div></div>
-  <p class="small muted">Нажмите на позицию, чтобы поставить другого игрока: сверху игроки на своей позиции, первыми те, кто даёт звену связку ролей. Не своя позиция: смена фланга −2, крайний в центре −4, нападающий в защите −10. Идеальная тройка — снайпер, плеймейкер и двусторонний; идеальная пара — атакующий и оборонительный.</p>
-  <button class="btn" data-a="autoLines">Собрать автоматически</button></section>
+  <p class="small muted">Нажмите на позицию, чтобы поставить другого игрока. У части игроков есть вторая позиция (например, ЛН/Ц): на ней −1. Чужая позиция в нападении −6, защитник не на своей стороне −3, нападающий в защите −10. Идеальная тройка — снайпер, плеймейкер и двусторонний; идеальная пара — атакующий и оборонительный.</p>
+  <p class="small"><b>Собрать автоматически</b> — всегда сначала по позициям:</p>
+  <div class="btn-row wrap"><button class="btn sm" data-a="autoLines" data-id="best">Сильнейшие</button><button class="btn sm" data-a="autoLines" data-id="combo">Связки ролей</button><button class="btn sm" data-a="autoLines" data-id="keep">Сохранить сыгранность</button></div></section>
   ${L.f.map((l,i)=>`<section class="card"><div class="lineh"><b>${i+1}-е звено</b><span>${r.lines[i].toFixed(1)} · вес ${FW_LW[i]}</span></div><div class="slots">${[0,1,2].map(j=>slot('f',i,j)).join('')}</div>${chem(l,'f')}</section>`).join('')}
   ${L.d.map((l,i)=>`<section class="card"><div class="lineh"><b>${i+1}-я пара защиты</b><span>${r.pairs[i].toFixed(1)} · вес ${D_LW[i]}</span></div><div class="slots two">${[0,1].map(j=>slot('d',i,j)).join('')}</div>${chem(l,'d')}</section>`).join('')}
   <section class="card"><div class="lineh"><b>Вратари</b><span>${r.g.toFixed(0)}</span></div><div class="slots two">${slot('g',0,0)}${slot('g',0,1)}</div></section>
@@ -2116,7 +2210,7 @@ function viewMarket(){
   if(U.mk==='fa'){
     const ff=U.ff;
     let fa=S.players.filter(p=>p.team===-1);
-    if(ff.pos!=='all')fa=fa.filter(p=>p.pos===ff.pos);
+    if(ff.pos!=='all')fa=fa.filter(p=>hasPos(p,ff.pos));
     if(ff.role!=='all')fa=fa.filter(p=>p.role===ff.role);
     if(+ff.ovr)fa=fa.filter(p=>p.ovr>=+ff.ovr);
     if(+ff.pot)fa=fa.filter(p=>p.pot>=+ff.pot);
@@ -2164,7 +2258,7 @@ function viewSearch(){
   const sel=(id,lbl,opts)=>`<label>${lbl}<select id="f-${id}">${opts.map(([v,n])=>`<option value="${v}" ${f[id]===v?'selected':''}>${n}</option>`).join('')}</select></label>`;
   let res=S.players.filter(p=>p.team>=0&&p.team!==S.user&&p.yrs>0);
   if(f.team!=='all')res=S.players.filter(p=>p.team===+f.team&&p.yrs>0);
-  if(f.pos!=='all')res=res.filter(p=>p.pos===f.pos);
+  if(f.pos!=='all')res=res.filter(p=>hasPos(p,f.pos));
   if(f.role!=='all')res=res.filter(p=>p.role===f.role);
   if(+f.ovr)res=res.filter(p=>p.ovr>=+f.ovr);
   if(+f.pot)res=res.filter(p=>p.pot>=+f.pot);
@@ -2191,7 +2285,7 @@ function osCard(){
   const c=S.players.filter(p=>p.team===-4),w=osWin(),used=F.osW===w;
   return `<section class="card"><h2>Поиск за рубежом<span>${money(osCost())}</span></h2>
   <p class="small muted">Два раза за сезон: на рынке межсезонья и в сезоне до дедлайна. Скаут приносит трёх кандидатов: возраст и уровень — дело случая, изредка попадаются очень сильные игроки. Контракт на 1–2 года по 60–75% справедливой цены.</p>
-  ${c.length?`<div class="list">${c.map(p=>`<button class="prow" data-a="player" data-id="${p.id}"><span class="pos ${p.pos}">${POS[p.pos]}</span><span class="pn"><b>${full(p)}</b><small>${p.age} л · ${flag(p.nat)} ${NAT_FULL[p.nat]} · пот. ${potTxt(p)}</small></span><span class="ovr ${tier(p.ovr)}">${p.ovr}</span><span class="money"><b>${money(p.osSal)}</b><small>${p.osY} ${yw(p.osY)}</small></span></button>`).join('')}</div><button class="btn sm" data-a="osDrop">Отказаться от всех</button>`:''}
+  ${c.length?`<div class="list">${c.map(p=>`<button class="prow" data-a="player" data-id="${p.id}">${posB(p)}<span class="pn"><b>${full(p)}</b><small>${p.age} л · ${flag(p.nat)} ${NAT_FULL[p.nat]} · пот. ${potTxt(p)}</small></span><span class="ovr ${tier(p.ovr)}">${p.ovr}</span><span class="money"><b>${money(p.osSal)}</b><small>${p.osY} ${yw(p.osY)}</small></span></button>`).join('')}</div><button class="btn sm" data-a="osDrop">Отказаться от всех</button>`:''}
   <button class="btn ${c.length?'':'pri'}" data-a="osSearch" ${!w||used?'disabled':''}>${!w?'Недоступно сейчас':used?'В этом окне поиск проведён':'Отправить скаута'}</button></section>`;
 }
 function viewDraft(){
@@ -2206,12 +2300,12 @@ function viewDraft(){
     const co=curOrder().slice(0,16);
     lot=`<section class="card"><h2>Лотерея: прогноз<span>шанс на 1-й выбор</span></h2><div class="tbl-wrap"><table><thead><tr><th>#</th><th>Клуб</th><th>О</th><th>Шанс</th></tr></thead><tbody>${co.map((id,i)=>`<tr class="${id===S.user?'me':''}"><td>${i+1}</td><td class="tm"><button class="tmb" data-a="team" data-id="${id}">${badge(T(id),22)}${T(id).name}</button></td><td>${pts(T(id))}</td><td>${ODDS[i]}%</td></tr>`).join('')}</tbody></table></div></section>`;
   }
-  const pool=S.players.filter(p=>p.team===-2&&(U.dPos==='all'||p.pos===U.dPos)).map(p=>({p,e:est(p),o:estO(p)})).sort((a,b)=>b.e-a.e||b.o-a.o);
+  const pool=S.players.filter(p=>p.team===-2&&hasPos(p,U.dPos)).map(p=>({p,e:est(p),o:estO(p)})).sort((a,b)=>b.e-a.e||b.o-a.o);
   const myTurn=live&&S.draft.seq[S.draft.i].own===S.user,mx=EXAM[F.scout];
   const list=`<section class="card"><h2>Проспекты драфта ${yr}<span>${pool.length}</span></h2>
   <div class="chips">${['all','C','LW','RW','D','G'].map(k=>`<button class="chip" data-a="dPos" data-id="${k}" aria-pressed="${U.dPos===k}">${k==='all'?'Все':POS[k]}</button>`).join('')}</div>
   <p class="small muted">Рейтинг и потенциал — оценки ваших скаутов (уровень ${F.scout}): ${UPG.scout.d(F.scout)}.${mx?` Точных просмотров: ${F.exam.length} из ${mx}.`:''} ${myTurn?'Нажмите на проспекта, чтобы выбрать его.':'Нажмите на проспекта, чтобы открыть его карточку.'}</p>
-  <div class="list">${pool.slice(0,80).map(({p,e,o},i)=>`<button class="prow" data-a="${myTurn?'draft':'player'}" data-id="${p.id}"><span class="pos ${p.pos}">${POS[p.pos]}</span><span class="pn"><b>${i+1}. ${full(p)}${known(p)?'<span class="flag ok">изучен</span>':''}</b><small>${p.age} л · ${flag(p.nat)} · ${roleVis(p)?ROLES[p.role]||'вратарь':'роль ?'}</small></span><span class="ovr ${tier(o)}">${known(p)?'':'~'}${o}</span><span class="money"><b>${potTxt(p)}</b><small>потенциал</small></span></button>`).join('')}</div></section>`;
+  <div class="list">${pool.slice(0,80).map(({p,e,o},i)=>`<button class="prow" data-a="${myTurn?'draft':'player'}" data-id="${p.id}">${posB(p)}<span class="pn"><b>${i+1}. ${full(p)}${known(p)?'<span class="flag ok">изучен</span>':''}</b><small>${p.age} л · ${flag(p.nat)} · ${roleVis(p)?ROLES[p.role]||'вратарь':'роль ?'}</small></span><span class="ovr ${tier(o)}">${known(p)?'':'~'}${o}</span><span class="money"><b>${potTxt(p)}</b><small>потенциал</small></span></button>`).join('')}</div></section>`;
   return hint('draft')+head+osCard()+picks+lot+list;
 }
 function finChart(){
@@ -2260,7 +2354,7 @@ function viewFin(){
   const campHTML=S.phase==='offseason'?(F.camp?`<p class="ok">Оплачен: ${CAMPS[F.camp].n}. ${CAMPS[F.camp].d}.</p>`:CAMPS.slice(1).map((c,k)=>{const lvl=k+1,lock=F.arena<c.arena,cost=rs(c.c*infl());return `<div class="upg"><b>${c.n}</b><span></span><small>${c.d}${lock?` · нужна арена ${c.arena}-го уровня`:''}</small><button class="btn sm" data-a="camp" data-id="${lvl}" ${lock||F.cash<cost?'disabled':''}>${money(cost)}</button></div>`;}).join('')):'<p class="small muted">Летний сбор покупается в межсезонье. Эффект действует со старта сезона.</p>';
   const young=active(S.user).filter(p=>p.age<=23).sort(byOvr),inCamp=young.filter(p=>p.camp);
   const devHTML=S.phase==='regular'?`<p class="small muted">До 3 игроков не старше 23 лет уезжают на 10 игровых дней и пропускают матчи. По возвращении +1…+3 к рейтингу, не выше потенциала. Один раз за сезон на игрока.</p>
-    <div class="list">${young.map(p=>{const ok=!p.camp&&!p.inj&&p.campS!==S.season&&inCamp.length<3;return `<div class="prow" style="grid-template-columns:34px 1fr auto auto;cursor:default"><span class="pos ${p.pos}">${POS[p.pos]}</span><span class="pn"><b>${nm(p)}${pFlags(p,true)}</b><small>${p.age} л · пот. ${p.pot}</small></span><span class="ovr ${tier(p.ovr)}">${p.ovr}</span>${p.camp?`<small class="muted">${p.camp} дн.</small>`:`<button class="btn sm" data-a="dev" data-id="${p.id}" ${ok&&F.cash>=devCost()?'':'disabled'}>${p.campS===S.season?'был':money(devCost())}</button>`}</div>`;}).join('')||'<p class="muted small">В составе нет игроков до 23 лет.</p>'}</div>`:'<p class="small muted">Лагерь развития работает во время регулярного сезона.</p>';
+    <div class="list">${young.map(p=>{const ok=!p.camp&&!p.inj&&p.campS!==S.season&&inCamp.length<3;return `<div class="prow" style="grid-template-columns:34px 1fr auto auto;cursor:default">${posB(p)}<span class="pn"><b>${nm(p)}${pFlags(p,true)}</b><small>${p.age} л · пот. ${p.pot}</small></span><span class="ovr ${tier(p.ovr)}">${p.ovr}</span>${p.camp?`<small class="muted">${p.camp} дн.</small>`:`<button class="btn sm" data-a="dev" data-id="${p.id}" ${ok&&F.cash>=devCost()?'':'disabled'}>${p.campS===S.season?'был':money(devCost())}</button>`}</div>`;}).join('')||'<p class="muted small">В составе нет игроков до 23 лет.</p>'}</div>`:'<p class="small muted">Лагерь развития работает во время регулярного сезона.</p>';
   return hint('fin')+`<section class="card"><h2>Касса клуба</h2><div class="kv two"><div><small>На счёте</small><b class="${F.cash<0?'bad':''}">${money(F.cash)}</b></div><div><small>Итог сезона ${S.phase==='offseason'?'(новый)':'пока'}</small><b class="${net<0?'bad':'ok'}">${money(net)}</b></div></div>
   ${finChart()}
   <div class="pl">${row('Билеты',ps.tix)}${row('Джерси',ps.jer)}${row('ТВ и лига',ps.tv)}${row('Спонсоры и арена',ps.spon)}${row('Зарплаты',ps.sal)}${row('Арена и персонал',ps.ops)}${row('Улучшения',ps.upg)}${row('Разовые траты',ps.misc)}<span class="tot">Итого</span><b class="tot ${net<0?'neg':''}">${money(net)}</b>${ps.div?row('Дивиденды владельцу',ps.div):''}</div>
@@ -2326,7 +2420,7 @@ function sheetPlayer(p){
   const mine=p.team===S.user,fa=p.team===-1,pool=p.team===-2,rights=p.team===-3,os=p.team===-4,t=p.team>=0?T(p.team):null;
   const back=U.back&&U.back.type==='team'?`<button class="btn sm backb" data-a="back">← ${T(U.back.id).name}</button>`:'';
   const role=p.role&&roleVis(p)?`<p class="small"><b class="role">${ROLES[p.role]}.</b> ${ROLE_D[p.role]}</p>`:p.role?'<p class="small muted">Роль скауты пока не определили.</p>':'';
-  if(pool){const mx=EXAM[S.fin.scout];return `<div class="stack">${back}<div style="display:flex;gap:14px;align-items:center"><div style="flex:1;min-width:0"><h3>${full(p)}</h3><p class="sub">${POS_FULL[p.pos]} · ${p.age} лет · ${flag(p.nat)} ${NAT_FULL[p.nat]} · проспект драфта ${S.draft?S.draft.yr:S.season+1}</p></div><div style="text-align:center"><div class="big-ovr num">${known(p)?'':'~'}${estO(p)}</div><small class="muted">рейтинг</small></div></div>
+  if(pool){const mx=EXAM[S.fin.scout];return `<div class="stack">${back}<div style="display:flex;gap:14px;align-items:center"><div style="flex:1;min-width:0"><h3>${full(p)}</h3><p class="sub">${posFull(p)} · ${p.age} лет · ${flag(p.nat)} ${NAT_FULL[p.nat]} · проспект драфта ${S.draft?S.draft.yr:S.season+1}</p></div><div style="text-align:center"><div class="big-ovr num">${known(p)?'':'~'}${estO(p)}</div><small class="muted">рейтинг</small></div></div>
   ${role}<div class="kv two"><div><small>Потенциал</small><b>${potTxt(p)}</b></div><div><small>Точность</small><b>${known(p)?'точно':`±${ERR_O[S.fin.scout]} / ±${ERR_P[S.fin.scout]}`}</b></div></div>
   ${mx&&!known(p)?`<button class="btn" data-a="exam" data-id="${p.id}" ${S.fin.exam.length>=mx?'disabled':''}>Точный просмотр · осталось ${mx-S.fin.exam.length}</button>`:''}</div>`;}
   let act='';
@@ -2343,7 +2437,7 @@ function sheetPlayer(p){
   const [lo,hi]=forecast(p),fc=lo===hi?(lo>0?'+':'')+lo:`${lo>0?'+':''}${lo}…${hi>0?'+':''}${hi}`;
   const ice=iceShare(p),ag=p.age+1;
   const perfTxt=p.gp>=20&&S.phase!=='regular'?(p.perf>.3?'выше ожиданий':p.perf<-.3?'ниже ожиданий':'на уровне'):'учтётся в конце сезона';
-  const sub=`${POS_FULL[p.pos]} · ${p.age} лет · ${flag(p.nat)} ${NAT_FULL[p.nat]}${t?` · ${t.city}`:''}${rights?` · права у ${T(p.rights).ab}`:''}${os?' · кандидат из-за рубежа':''}`;
+  const sub=`${posFull(p)} · ${p.age} лет · ${flag(p.nat)} ${NAT_FULL[p.nat]}${t?` · ${t.city}`:''}${rights?` · права у ${T(p.rights).ab}`:''}${os?' · кандидат из-за рубежа':''}`;
   const c1=fa||p.exp?['Просит у вас',money(askFor(p))]:rights?['Контракт новичка',money(elc(p))]:os?['Контракт',money(p.osSal)]:['Зарплата',money(p.sal)];
   const c2=fa||p.exp?['Срок',`${p.askY} ${yw(p.askY)}`]:rights?['Права ещё',`${p.rY} ${yw(p.rY)}`]:os?['Срок',`${p.osY} ${yw(p.osY)}`]:['Осталось',`${p.yrs} ${yw(p.yrs)}`];
   const it=fa?interest(p):[];
@@ -2370,7 +2464,7 @@ function sheetOffer(){
   const yrs=o.temp?1:o.yrs,cy=o.temp?p.askY:yrs,c=chance(p,o.sal,cy),room=S.cap-payroll(S.user)-o.sal,disc=Math.round((1-discU())*100),req=reqFor(p,cy),drop=patDrop(p,o.sal,cy);
   const lt=p.team===-1?ltirFree():[],mY=maxY(p);
   const ta=termAdj(p,cy),tnote=o.temp?'Временный контракт: срок до возвращения травмированного.':ta.f>1.001?`За такой срок просит больше: ×${ta.f.toFixed(2)}.`:ta.f<.999?`За длинный контракт готов уступить: ×${ta.f.toFixed(2)}.`:ta.pen>0?'Срок не совпадает с желаемым: шанс ниже.':'Срок совпадает с желаемым.';
-  return `<div class="stack">${hint('offer')}<div><h3>${p.exp?'Продление':'Контракт'}: ${full(p)}</h3><p class="sub">${POS_FULL[p.pos]}${p.role?' · '+ROLES[p.role]:''} · ${p.age} лет · рейтинг ${p.ovr}, потенциал ${p.pot}.</p></div>
+  return `<div class="stack">${hint('offer')}<div><h3>${p.exp?'Продление':'Контракт'}: ${full(p)}</h3><p class="sub">${posFull(p)}${p.role?' · '+ROLES[p.role]:''} · ${p.age} лет · рейтинг ${p.ovr}, потенциал ${p.pot}.</p></div>
   <div class="factors"><span>Базовый запрос</span><b>${money(p.ask)}</b><span>Престиж вашего клуба</span><b class="${disc>=0?'ok':'bad'}">${disc>=0?'−':'+'}${Math.abs(disc)}%</b>${p.exp?'<span>Лояльность к клубу</span><b class="ok">+12% к шансу</b>':''}${p.agentW===S.win?'<span>Бонус агенту</span><b class="ok">+5% к шансу</b>':''}<span>Желаемый срок</span><b>${p.askY} ${yw(p.askY)}</b><span>Ожидает при выбранном сроке</span><b>${money(req)}</b></div>
   <div><div class="chance"><span>Терпение</span><b style="font-size:15px">${p.pat}/100</b></div><div class="bar ${p.pat<35?'red':'good'}"><i style="width:${p.pat}%"></i></div><p class="small muted" style="margin-top:4px">Если откажет: −${drop}. При нуле игрок прекратит переговоры до конца окна.</p></div>
   ${lt.length?`<div class="seg"><button data-a="otemp" data-id="0" aria-pressed="${!o.temp}">Обычный контракт</button><button data-a="otemp" data-id="${lt[0].id}" aria-pressed="${!!o.temp}">Временно вместо ${nm(lt[0])}</button></div>`:''}
@@ -2384,22 +2478,22 @@ function sheetOffer(){
 }
 function sheetSlot(){
   const {k,i,j}=U.slot,sp=slotPos(k,j),L=S.lines,M=idx();
-  const where=id=>{for(const [a,b,c] of SLOTS)if(getSlot(L,a,b,c)===id)return a==='g'?(c?'запасной В':'основной В'):a==='f'?`${b+1}-е звено, ${POS[SLOT_F[c]]}`:`${b+1}-я пара`;return 'запас';};
-  const own=p=>k==='g'?true:k==='d'?p.pos==='D':p.pos===sp;
+  const where=id=>{for(const [a,b,c] of SLOTS)if(getSlot(L,a,b,c)===id)return a==='g'?(c?'запасной В':'основной В'):a==='f'?`${b+1}-е звено, ${POS[SLOT_F[c]]}`:`${b+1}-я пара, ${POS[slotPos('d',c)]}`;return 'запас';};
+  const own=p=>ptier(p,sp)===0;
   const base=k==='g'?null:combo(L[k][i],M,k==='f'?'f':'d');
   const gain=p=>{if(k==='g')return {d:0,t:''};const l=L[k][i].slice();l[j]=p.id;const c=combo(l,M,k==='f'?'f':'d'),d=c.b-(base?base.b:0);return {d,t:c.lv===2?'идеальная связка':c.lv===1?'связка':''};};
-  const list=healthy(S.user).filter(p=>sp==='G'?p.pos==='G':p.pos!=='G').map(p=>({p,e:eff(p,sp),g:gain(p),o:own(p)}));
-  list.sort((a,b)=>(b.o-a.o)||(b.g.d-a.g.d)||(b.e-a.e));
-  const row=({p,e,g})=>`<button class="prow" data-a="assign" data-id="${p.id}"><span class="pos ${p.pos}">${POS[p.pos]}</span><span class="pn"><b>${nm(p)}${g.d>0?`<span class="flag ok">+${g.d} ${g.t}</span>`:''}</b><small>${p.role?ROLES[p.role]+' · ':''}${where(p.id)}</small></span><span class="ovr ${tier(e)}">${e}</span><span class="money"><b>${e<p.ovr?'−'+(p.ovr-e):'своя'}</b><small>позиция</small></span></button>`;
+  const list=healthy(S.user).filter(p=>sp==='G'?p.pos==='G':p.pos!=='G').map(p=>({p,e:eff(p,sp),g:gain(p),o:own(p),t:ptier(p,sp)}));
+  list.sort((a,b)=>(b.o-a.o)||(a.t-b.t)||(b.g.d-a.g.d)||(b.e-a.e));
+  const row=({p,e,g})=>`<button class="prow" data-a="assign" data-id="${p.id}">${posB(p)}<span class="pn"><b>${nm(p)}${g.d>0?`<span class="flag ok">+${g.d} ${g.t}</span>`:''}</b><small>${p.role?ROLES[p.role]+' · ':''}${where(p.id)}</small></span><span class="ovr ${tier(e)}">${e}</span><span class="money"><b>${e<p.ovr?'−'+(p.ovr-e):'своя'}</b><small>позиция</small></span></button>`;
   const a=list.filter(x=>x.o),b=list.filter(x=>!x.o);
-  return `<div class="stack"><div><h3>${k==='g'?'Вратарь':k==='f'?`${i+1}-е звено · ${POS[sp]}`:`${i+1}-я пара защиты`}</h3><p class="sub">Рейтинг указан с учётом позиции. Пометка «+связка» — сколько звено получит сразу за сочетание ролей. Если игрок уже стоит в другом звене, они поменяются местами.</p></div>
-  <div class="list"><div class="grp"><span>Своя позиция</span><span>${a.length}</span></div>${a.map(row).join('')}${b.length?`<div class="grp"><span>Другие позиции</span><span>${b.length}</span></div>${b.map(row).join('')}`:''}</div></div>`;
+  return `<div class="stack"><div><h3>${k==='g'?'Вратарь':k==='f'?`${i+1}-е звено · ${POS[sp]}`:`${i+1}-я пара · ${POS[sp]}`}</h3><p class="sub">Рейтинг указан с учётом позиции. Пометка «+связка» — сколько звено получит сразу за сочетание ролей. Если игрок уже стоит в другом звене, они поменяются местами.</p></div>
+  <div class="list"><div class="grp"><span>Своя или вторая позиция</span><span>${a.length}</span></div>${a.map(row).join('')}${b.length?`<div class="grp"><span>Другие позиции</span><span>${b.length}</span></div>${b.map(row).join('')}`:''}</div></div>`;
 }
 function sheetPreview(t){
   const top=active(t.id).sort(byOvr).slice(0,6),r=allR()[t.id];
   return `<div class="stack"><div style="display:flex;gap:14px;align-items:center">${badge(t,96)}<div style="min-width:0"><h3>${t.city} ${t.name}</h3><p class="sub">${CONF[t.conf]} · ${DIVS[t.div]}</p></div></div>
   <div class="kv"><div><small>Сила</small><b>${r.t.toFixed(1)}</b></div><div><small>Зарплаты</small><b>${money(payroll(t.id))}</b></div><div><small>Свободно</small><b>${money(S.cap-payroll(t.id))}</b></div></div>
-  <div class="list">${top.map(p=>`<div class="prow" style="cursor:default"><span class="pos ${p.pos}">${POS[p.pos]}</span><span class="pn"><b>${full(p)}</b><small>${p.age} л · ${flag(p.nat)} · ${p.role?ROLES[p.role]:'вратарь'}</small></span><span class="ovr ${tier(p.ovr)}">${p.ovr}</span><span class="money"><b>${money(p.sal)}</b><small>${p.yrs} ${yw(p.yrs)}</small></span></div>`).join('')}</div>
+  <div class="list">${top.map(p=>`<div class="prow" style="cursor:default">${posB(p)}<span class="pn"><b>${full(p)}</b><small>${p.age} л · ${flag(p.nat)} · ${p.role?ROLES[p.role]:'вратарь'}</small></span><span class="ovr ${tier(p.ovr)}">${p.ovr}</span><span class="money"><b>${money(p.sal)}</b><small>${p.yrs} ${yw(p.yrs)}</small></span></div>`).join('')}</div>
   <button class="btn pri" data-a="take" data-id="${t.id}">Возглавить клуб</button></div>`;
 }
 function sheetHelp(){
@@ -2544,7 +2638,8 @@ function act(a,id){
     case 'offNo':{const o=S.offers.find(x=>x.id===n);S.offers=S.offers.filter(x=>x.id!==n);if(o)news(`Отклонили предложение ${T(o.tid).ab}.`);break;}
     case 'slot':{const [k,i,j]=id.split('|');U.slot={k,i:Number(i),j:Number(j)};U.sheet={type:'slot'};break;}
     case 'assign':assignSlot(n);break;
-    case 'autoLines':S.lines=autoLines(S.user);toast('Звенья собраны по рейтингу.');break;
+    case 'autoLines':{const m=AUTO_M[id]?id:'best',L=autoLines(S.user,m),kept=L.info.kept;delete L.info;S.lines=L;
+      toast(m==='best'?'Звенья собраны: сильнейшие по позициям.':m==='combo'?'Звенья собраны: связки ролей по позициям.':kept?`Сохранили сыгранных звеньев: ${kept}. Остальное собрано по позициям.`:'Сыгранных звеньев (5+ игр) нет: собрали сильнейших по позициям.');break;}
     case 'tixAuto':F.tix.auto=id==='1';if(!F.tix.auto)F.tix.price=autoTix(hype(S.user));break;
     case 'jerAuto':F.jer.auto=id==='1';if(!F.jer.auto)F.jer.price=autoJer(hype(S.user),active(S.user).filter(p=>p.ovr>=84).length);break;
     case 'tixP':F.tix.price=clamp(F.tix.price+n,20,400);break;
@@ -2586,6 +2681,7 @@ const tgHaptic=k=>{try{TG&&TG.HapticFeedback&&(k==='goal'?TG.HapticFeedback.noti
 function boot(data){
   tgInit();
   S=(data&&data.S)||load();
+  if(S&&S.players)S.players.forEach(p=>{if(p.pos2===undefined||(p.pos==='D'&&!p.sd))rollPos2(p);});
   if(!S)newWorld();
   document.addEventListener('click',e=>{const el=e.target.closest('[data-a]');if(!el||el.disabled)return;if(el.dataset.a==='veil'&&e.target!==el)return;act(el.dataset.a,el.dataset.id);});
   document.addEventListener('input',e=>{const id=e.target.id;if(id==='tac'||id==='ltac'){S.tac=Number(e.target.value);const l=document.getElementById(id+'Lbl');if(l)l.textContent=`${S.tac} · ${TACN[S.tac]}`;save();}});
