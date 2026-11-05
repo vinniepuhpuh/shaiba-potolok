@@ -29,6 +29,12 @@
 .wn ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:14px}
 .pick-hero .hero-sub{margin-top:4px;color:var(--board-ink);font:600 13px var(--fb);letter-spacing:.14em;text-transform:uppercase;opacity:.75}
 .pos i{font-style:normal;font-size:9px;opacity:.7;letter-spacing:0}
+.stys{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:6px;margin:10px 0}
+.sty{border:1px solid var(--line);border-radius:10px;background:var(--sunk);padding:8px 9px;text-align:left;display:flex;flex-direction:column;gap:2px;color:var(--ink);font:inherit;cursor:pointer}
+.sty b{font-size:13.5px}.sty small{font-size:11.5px;color:var(--muted)}.sty i{font-style:normal;font-size:11px;line-height:1.25}
+.sty.on{background:var(--surface);border-color:var(--ink);box-shadow:0 0 0 1px var(--ink) inset}
+.seg.five button{font-size:11.5px;padding:8px 1px}
+.tgl-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px}.tgl-row .seg{flex:0 0 auto}.tgl-row .seg button{padding:6px 12px}
 </style>
 <style>
 /* Layout: one-column phone app. Scoreboard header on top, scrolling content, tab bar pinned to the bottom. */
@@ -584,7 +590,7 @@ function genPool(){
 }
 function makePicks(yr){S.teams.forEach(t=>{for(let rd=1;rd<=RNDS;rd++)S.picks.push({id:S.nid++,yr,rd,orig:t.id,own:t.id});});}
 function newWorld(){
-  S={v:6,seen:{},tutDone:false,win:1,os:[],box:[],live:null,nid:1,season:2026,cap:CAP0,phase:'regular',day:0,teams:[],players:[],picks:[],user:null,prevUser:null,sched:[],news:[],recent:[],dead:[],po:null,off:null,hist:[],draft:null,dOrder:null,lines:null,chem:{},offers:[],fin:newFin(),fired:false,tac:5,tacAuto:true};
+  S={v:6,seen:{},tutDone:false,win:1,os:[],box:[],live:null,nid:1,season:2026,cap:CAP0,phase:'regular',day:0,teams:[],players:[],picks:[],user:null,prevUser:null,sched:[],news:[],recent:[],dead:[],po:null,off:null,hist:[],draft:null,dOrder:null,lines:null,chem:{},offers:[],fin:newFin(),fired:false,tac:5,tacAuto:true,sty:'BAL',styAuto:true,risk:3,pullG:true};
   const owns=shuffle([...Array(32)].map((_,i)=>GMK[i%GMK.length]));
   TEAMS.forEach((t,i)=>{const o={id:i,city:t[0],name:t[1],ab:t[2],c1:t[3],c2:t[4],conf:t[5],div:t[6],nat:t[7],titles:0,lastPct:.5,own:owns[i],fail:0,lastRank:16};zst(o);S.teams.push(o);});
   S.teams.forEach(t=>{
@@ -755,7 +761,8 @@ function teamCtx(tid,M){
   L.d.forEach((l,i)=>l.forEach(id=>{const p=id!=null&&M.get(id);if(p){const x=sw(p,D_LW[i],p.pos==='D'?.35:.7);x.lw=D_LW[i];x.li=i;sk.push(x);}}));
   return {tid,L,r,sk,ppU:u.ppU.map(p=>sw(p,1,p.pos==='D'?.5:1)),uIds:{pp:u.ppU.map(p=>p.id),pk:u.pkU.map(p=>p.id)},pp:u.pp,pk:u.pk,g:L.g[0]!=null?M.get(L.g[0]):null};
 }
-function ctx(){const M=idx(),C={};S.teams.forEach(t=>C[t.id]=teamCtx(t.id,M));return C;}
+let _CM=null;
+function ctx(){const M=idx(),C={};_CM=M;S.teams.forEach(t=>C[t.id]=teamCtx(t.id,M));return C;}
 function wpick(arr,key,ex,ex2){let tot=0;for(const x of arr)if(x!==ex&&x!==ex2)tot+=x[key];let r=R()*tot;for(const x of arr){if(x===ex||x===ex2)continue;if((r-=x[key])<0)return x;}return null;}
 function credit(arr,n,pp){
   if(!arr.length)return;
@@ -766,19 +773,85 @@ function penalize(arr,n){if(!arr.length)return;for(let k=0;k<n;k++){let tot=sum(
 function recTac(tid,opp,C,home){const rt=x=>C?C[x].r.t:allR()[x].t;return clamp(Math.round(5.5+(rt(tid)-rt(opp)+(home?1.2:-1.2))*.35),1,10);}
 function tacFor(tid,opp,C,home){
   const rec=recTac(tid,opp,C,home);
-  if(tid===S.user)return S.tacAuto?rec:S.tac;
+  if(tid===S.user)return S.styAuto?rec:RISKT[S.risk||3];
   switch(T(tid).own){case 'olig':return clamp(rec+2,6,9);case 'acct':return clamp(rec-1,3,6);case 'build':return clamp(rec,4,7);case 'show':return clamp(rec+3,7,9);case 'old':return clamp(rec-1,3,5);case 'loyal':return clamp(rec,4,7);default:return rec;}
 }
+/* ---------- game styles ---------- */
+const STY={
+  BAL:{n:'Баланс',s:'Б',d:'Без сильных и слабых сторон: никого не бьёт и никому не уступает.',w:null},
+  FC:{n:'Форчекинг',s:'Ф',d:'Давление в зоне соперника. Нужны двусторонние нападающие и защитники-универсалы.',w:{TW:1,SN:.4,UN:1,OF:.4}},
+  PO:{n:'Владение',s:'В',d:'Терпеливая игра с шайбой. Нужны плеймейкеры и атакующие защитники.',w:{PM:1,SN:.4,OF:1,UN:.4}},
+  TR:{n:'Ловушка',s:'Л',d:'Плотная средняя зона. Нужны двусторонние нападающие и оборонительные защитники.',w:{TW:1,PM:.3,DF:1,UN:.4}},
+  CA:{n:'Контратака',s:'К',d:'Отдать шайбу и убежать в отрыв. Нужны снайперы и надёжные защитники.',w:{SN:1,PM:.4,DF:.6,UN:.4}}
+};
+const STK=['FC','PO','TR','CA','BAL'],ST4=['FC','PO','TR','CA'],BEATS={FC:'PO',PO:'TR',TR:'CA',CA:'FC'};
+const beatenBy=k=>ST4.find(x=>BEATS[x]===k);
+const styM=(a,b)=>a==='BAL'||b==='BAL'||a===b?0:BEATS[a]===b?1:BEATS[b]===a?-1:0;
+const RISKN=['','Осторожно','Сдержанно','Ровно','Смело','Ва-банк'],RISKT=[0,1,3,5.5,8,10];
+const nearRisk=v=>{let b=3,bd=99;for(let i=1;i<=5;i++){const d=Math.abs(RISKT[i]-v);if(d<bd){bd=d;b=i;}}return b;};
+const FIT_A=.15,FIT_B=.45;
+function styRaw(tid,k,L,M){
+  const w=STY[k].w;let s=0,n=0;
+  const add=(id,lw)=>{n+=lw;const p=id==null?null:M.get(id);if(p)s+=lw*(w[p.role]||0)*clamp((p.ovr-55)/30,0,1.3);};
+  L.f.forEach((l,i)=>l.forEach(id=>add(id,FW_LW[i])));L.d.forEach((l,i)=>l.forEach(id=>add(id,D_LW[i])));
+  return s/n;
+}
+/* how well the lineup suits a style, 0..1 (Balance is always .5) */
+function styFit(tid,k,L,M){
+  if(k==='BAL')return .5;
+  M=M||_CM||idx();L=L||getLines(tid);
+  return clamp((styRaw(tid,k,L,M)-FIT_A)/(FIT_B-FIT_A),0,1);
+}
+function fitsAll(tid,L,M){M=M||idx();L=L||getLines(tid);const o={};STK.forEach(k=>o[k]=styFit(tid,k,L,M));return o;}
+const GMSTY={olig:{FC:.08,PO:.06},show:{PO:.08,CA:.06},acct:{TR:.1},old:{TR:.08,PO:.04},build:{CA:.08,FC:.06},loyal:{TR:.04,FC:.04}};
+function styRank(t){const f=fitsAll(t.id),b=GMSTY[t.own]||{};return ST4.map(k=>({k,v:f[k]+(b[k]||0)+R()*.04})).sort((a,b)=>b.v-a.v).map(x=>x.k);}
+function ensureSty(t){if(!t.styL)t.styL=[];if(!t.styF)t.styF=[];if(!t.sty)t.sty=styRank(t)[0];return t;}
+function aiStyle(tid,opp){
+  const t=ensureSty(T(tid));
+  if(opp===S.user&&S.recent.length>=4){
+    const c={};S.recent.slice(0,5).forEach(r=>{if(r.sty)c[r.sty]=(c[r.sty]||0)+1;});
+    const top=Object.keys(c).sort((a,b)=>c[b]-c[a])[0];
+    if(top&&top!=='BAL'&&c[top]>=4&&R()<.3)return beatenBy(top);
+  }
+  const r=R();if(r<.78)return t.sty;
+  if(r<.94){const rk=styRank(t);return rk[0]===t.sty?rk[1]:rk[0];}
+  return 'BAL';
+}
+function userStyleAuto(){const f=fitsAll(S.user);return ST4.slice().sort((a,b)=>f[b]-f[a])[0];}
+function userStyle(){if(!S.styAuto)return S.sty||'BAL';const f=fitsAll(S.user);return ST4.slice().sort((a,b)=>f[b]-f[a])[0];}
+const styFor=(tid,opp)=>tid===S.user?userStyle():aiStyle(tid,opp);
+/* goal multipliers [home, away]: the side whose style beats the other gains 5..10% by its fit; a well-fitted style adds up to ±2% */
+function styMul(yh,ya,fh,fa){
+  const m=styM(yh,ya),x=1.35*(m>0?.05+.05*fh:m<0?-(.05+.05*fa):0);
+  return [(1+x)*(1+.05*(fh-.5)),(1-x)*(1+.05*(fa-.5))];
+}
+const styWinPct=(mine,opp,fm,fo)=>{const m=styM(mine,opp);return m>0?Math.round(5+5*fm):m<0?-Math.round(5+5*fo):0;};
+function styRec(tid,y,win){
+  if(tid===S.user||!y)return;const t=ensureSty(T(tid));
+  t.styL.unshift(y);t.styL.length=Math.min(t.styL.length,10);
+  if(t.styCd>0)t.styCd--;
+  if(y!==t.sty)return;
+  t.styF.push(win?1:0);if(t.styF.length>12)t.styF.shift();
+  if(!(t.styCd>0)&&t.styF.length>=12&&sum(t.styF,x=>x)<=2){
+    const old=t.sty;t.sty=styRank(t).find(k=>k!==old);t.styF=[];t.styCd=30;
+    if(S.user!=null&&T(S.user).div===t.div)news(`${t.city} ${t.name} меняют стиль игры: «${STY[old].n}» не приносил побед, теперь «${STY[t.sty].n}».`);
+  }
+}
+const pullOn=tid=>tid===S.user?S.pullG!==false:true;
 function simGame(h,a,C,stats){
   const H=C[h],A=C[a],sh=tacFor(h,a,C,true),sa=tacFor(a,h,C,false);
+  const yh=styFor(h,a),ya=styFor(a,h),M_=_CM||idx(),fh=styFit(h,yh,H.L,M_),fa=styFit(a,ya,A.L,M_),sm=styMul(yh,ya,fh,fa);
   const diff=H.r.t+1.2-A.r.t,tf=(1+.09*(sh-5.5))*(1+.09*(sa-5.5));
-  let eh=poisson(2.15*Math.exp(diff*.035)*tf),ea=poisson(2.15*Math.exp(-diff*.035)*tf);
+  let eh=poisson(2.09*Math.exp(diff*.035)*tf*sm[0]),ea=poisson(2.09*Math.exp(-diff*.035)*tf*sm[1]);
   const rough=penMul(h,a);
   const nh=poisson(3*rough*clamp(1+.03*(A.r.f-H.r.d),.7,1.3)*(1+.04*(5.5-sh)));
   const na=poisson(3*rough*clamp(1+.03*(H.r.f-A.r.d),.7,1.3)*(1+.04*(5.5-sa)));
   const pH=clamp(.2*Math.exp((H.pp-A.pk)*.05),.08,.35),pA=clamp(.2*Math.exp((A.pp-H.pk)*.05),.08,.35);
   let ph=0,pa=0;for(let i=0;i<na;i++)if(R()<pH)ph++;for(let i=0;i<nh;i++)if(R()<pA)pa++;
   let gh=eh+ph,ga=ea+pa,ot=false;
+  {const d=gh-ga,ad=Math.abs(d);if(ad>=1&&ad<=2&&pullOn(d<0?h:a)){
+    if(R()<(ad===1?.13:.03)){if(d<0){gh++;eh++;}else{ga++;ea++;}}
+    else if(R()<.3){if(d<0){ga++;ea++;}else{gh++;eh++;}}}}
   if(gh===ga){ot=true;if(R()<1/(1+Math.exp(-diff*.06))){gh++;eh++;}else{ga++;ea++;}}
   if(stats){
     const th=T(h),ta=T(a);
@@ -792,7 +865,7 @@ function simGame(h,a,C,stats){
   }
   [[h,gh>ga],[a,ga>gh]].forEach(([id,w])=>{const f=T(id).form;f.push(w?1:0);if(f.length>10)f.shift();});
   injRoll(H);injRoll(A);
-  return {h,a,gh,ga,ot,sh,sa,ph,pa,nh,na};
+  return {h,a,gh,ga,ot,sh,sa,ph,pa,nh,na,yh,ya};
 }
 const penMul=(h,a)=>(T(h).own==='old'&&h!==S.user?1.12:1)*(T(a).own==='old'&&a!==S.user?1.12:1);
 /* ---------- injuries ---------- */
@@ -851,7 +924,7 @@ function bumpChem(C){S.teams.forEach(t=>{const L=C[t.id].L;[...L.f,...L.d].forEa
 function pruneChem(){const keep={};S.teams.forEach(t=>{const L=getLines(t.id);[...L.f,...L.d].forEach(l=>{const k=ckey(l);if(k&&S.chem[k])keep[k]=S.chem[k];});});S.chem=keep;}
 function userRes(r){
   const home=r.h===S.user,us=home?r.gh:r.ga,them=home?r.ga:r.gh;
-  S.recent.unshift({opp:home?r.a:r.h,us,them,ot:r.ot,home,w:us>them,tac:home?r.sh:r.sa,otac:home?r.sa:r.sh,pp:home?r.ph:r.pa});S.recent.length=Math.min(S.recent.length,12);
+  S.recent.unshift({opp:home?r.a:r.h,us,them,ot:r.ot,home,w:us>them,tac:home?r.sh:r.sa,otac:home?r.sa:r.sh,sty:home?r.yh:r.ya,osty:home?r.ya:r.yh,pp:home?r.ph:r.pa});S.recent.length=Math.min(S.recent.length,12);
 }
 
 /* ---------- finances ---------- */
@@ -978,6 +1051,7 @@ function playDay(liveRes){
     const mine=h===S.user||a===S.user,r=mine?(liveRes||quickUser(h,a,'reg')):simGame(h,a,C,true),H=T(h),A=T(a);
     H.gf+=r.gh;H.ga+=r.ga;A.gf+=r.ga;A.ga+=r.gh;
     if(r.gh>r.ga){H.w++;r.ot?A.ot++:A.l++;}else{A.w++;r.ot?H.ot++:H.l++;}
+    styRec(h,r.yh,r.gh>r.ga);styRec(a,r.ya,r.ga>r.gh);
     if(h===S.user||a===S.user){userRes(r);finDay(h===S.user,false,C);}
   }
   bumpChem(C);
@@ -1185,13 +1259,16 @@ function prep(L){
   let sh=tacFor(L.h,L.a,C,true),sa=tacFor(L.a,L.h,C,false);
   if(L.h!==S.user)sh=clamp(sh-Math.round(lead*late),1,10);
   if(L.a!==S.user)sa=clamp(sa+Math.round(lead*late),1,10);
-  if(L.h===S.user&&S.tacAuto)sh=clamp(sh-Math.round(lead*late),1,10);
-  if(L.a===S.user&&S.tacAuto)sa=clamp(sa+Math.round(lead*late),1,10);
+  if(L.h===S.user&&S.styAuto)sh=clamp(sh-Math.round(lead*late),1,10);
+  if(L.a===S.user&&S.styAuto)sa=clamp(sa+Math.round(lead*late),1,10);
   const diff=H.r.t+1.2-A.r.t,tf=(1+.09*(sh-5.5))*(1+.09*(sa-5.5));
   const penH=3*clamp(1+.03*(A.r.f-H.r.d),.7,1.3)*(1+.04*(5.5-sh)),penA=3*clamp(1+.03*(H.r.f-A.r.d),.7,1.3)*(1+.04*(5.5-sa));
   const es=REG/Math.max(110,REG-5.4*(penH+penA));
-  const gH=2.05*Math.exp(diff*.035)*tf/REG*es,gA=2.05*Math.exp(-diff*.035)*tf/REG*es;
-  const sH=Math.max(gH*1.8,22*Math.exp(diff*.02)*Math.sqrt(tf)/REG*es),sA=Math.max(gA*1.8,22*Math.exp(-diff*.02)*Math.sqrt(tf)/REG*es);
+  if(!L.sty)L.sty=[styFor(L.h,L.a),styFor(L.a,L.h)];
+  if(L.h===S.user)L.sty[0]=userStyle();if(L.a===S.user)L.sty[1]=userStyle();
+  const fh=styFit(L.h,L.sty[0],H.L,M),fa=styFit(L.a,L.sty[1],A.L,M),sm=styMul(L.sty[0],L.sty[1],fh,fa);
+  const gH=1.99*Math.exp(diff*.035)*tf/REG*es*sm[0],gA=1.99*Math.exp(-diff*.035)*tf/REG*es*sm[1];
+  const sH=Math.max(gH*1.8,22*Math.exp(diff*.02)*Math.sqrt(tf*sm[0])/REG*es),sA=Math.max(gA*1.8,22*Math.exp(-diff*.02)*Math.sqrt(tf*sm[1])/REG*es);
   const pH=clamp(.2*Math.exp((H.pp-A.pk)*.05),.08,.35),pA=clamp(.2*Math.exp((A.pp-H.pk)*.05),.08,.35);
   L.R={g:[gH,gA],s:[sH,sA],pen:[penH/REG,penA/REG],q:[1-Math.pow(1-Math.min(.5,pH*1.12),1/6),1-Math.pow(1-Math.min(.5,pA*1.12),1/6)],diff};
   L.tac=[sh,sa];
@@ -1228,6 +1305,9 @@ function stepTick(L){
     }
   }
   const n=[L.pen[0].length,L.pen[1].length],ice=[onIce(L,X,0),onIce(L,X,1)],sr=[0,0];
+  const left=REG-L.tick,pull=[0,1].map(k=>{const d=L.sc[1-k]-L.sc[k];return !ot&&L.per===3&&left>0&&left<=6&&d>=1&&d<=2&&n[k]<=n[1-k]&&pullOn(k?L.a:L.h);});
+  if(!L.pulled)L.pulled=[false,false];
+  for(const k of [0,1]){if(pull[k]&&!L.pulled[k])evAdd(L,'gen',k,'Вратарь уехал на скамейку: шестой полевой');L.pulled[k]=pull[k];}
   let shot=null,goal=null,post=null;
   for(const k of [0,1]){
     if(L.done)break;
@@ -1235,23 +1315,25 @@ function stepTick(L){
     if(n[k]<n[1-k]){pp=true;s=.45;g=R_.q[k];}
     else if(n[k]>n[1-k]){s=.04;g=.004;}
     else{const lm=X[k].lm[L.shift[k].f]||1;s=R_.s[k]*lm;g=R_.g[k]*lm;if(ot){s*=2.2;g*=2.2;}}
+    if(pull[k]){s*=1.5;g*=1.8;}
+    const en=pull[1-k];if(en)s=Math.max(s,.1);
     sr[k]=s;
     if(!ice[k].length||R()>=s)continue;
     const sid=wPickId(ice[k],X[k].w,'wg');shot=k;
-    lstat(L,sid,k).sh++;L.psh[L.per-1][k]++;L.gk[1-k].sa++;
-    if(R()<g/s){
-      goal=k;L.sc[k]++;L.pg[L.per-1][k]++;L.gk[1-k].ga++;
+    lstat(L,sid,k).sh++;L.psh[L.per-1][k]++;if(!en)L.gk[1-k].sa++;
+    if(R()<(en?.5:g/s)){
+      goal=k;L.sc[k]++;L.pg[L.per-1][k]++;if(!en)L.gk[1-k].ga++;
       const st=lstat(L,sid,k);st.g++;if(pp){st.ppg++;L.ppg[k]++;}
       const as=[];
       if(R()<.88){const a1=wPickId(ice[k],X[k].w,'wa',sid);if(a1){lstat(L,a1,k).a++;as.push(a1);if(R()<.62){const rest=ice[k].filter(i=>i!==a1);const a2=wPickId(rest,X[k].w,'wa',sid);if(a2){lstat(L,a2,k).a++;as.push(a2);}}}}
       if(!pp&&n[k]===n[1-k]){ice[k].forEach(i=>lstat(L,i,k).pm++);ice[1-k].forEach(i=>lstat(L,i,1-k).pm--);}
       if(pp)L.pen[1-k].shift();
       L.lg={k,sid,as:as.slice(),pp,sh:!pp&&n[k]>n[1-k],per:L.per,sc:L.sc.slice()};
-      evAdd(L,'goal',k,`Гол! ${nm(M.get(sid))}${as.length?` (${as.map(i=>M.get(i).l).join(', ')})`:''}${pp?', в большинстве':n[k]>n[1-k]?', в меньшинстве':''} · ${L.sc[0]}:${L.sc[1]}`);
+      evAdd(L,'goal',k,`Гол! ${nm(M.get(sid))}${as.length?` (${as.map(i=>M.get(i).l).join(', ')})`:''}${pp?', в большинстве':n[k]>n[1-k]?', в меньшинстве':''}${en?', в пустые ворота':''} · ${L.sc[0]}:${L.sc[1]}`);
       L.lg.s=L.ev[L.ev.length-1].s;
       if(ot){L.done=true;L.ot=true;}
     }else if(R()<.035){
-      post=k;lstat(L,sid,k).sh--;L.psh[L.per-1][k]--;L.gk[1-k].sa--;
+      post=k;lstat(L,sid,k).sh--;L.psh[L.per-1][k]--;if(!en)L.gk[1-k].sa--;
       evAdd(L,'post',k,`Штанга! Бросал ${nm(M.get(sid))}`);
     }
   }
@@ -1283,7 +1365,7 @@ function runLive(L,stopAt){
 function finishLive(L){
   if(L.fin)return L.res;L.fin=true;
   const stats=L.kind==='reg',M=idx(),tm=[L.h,L.a],X=liveX(L);
-  const res={h:L.h,a:L.a,gh:L.sc[0],ga:L.sc[1],ot:L.ot||L.so,sh:L.tac[0],sa:L.tac[1],ph:L.ppg[0],pa:L.ppg[1],nh:L.pim[0]/2,na:L.pim[1]/2};
+  const res={h:L.h,a:L.a,gh:L.sc[0],ga:L.sc[1],ot:L.ot||L.so,sh:L.tac[0],sa:L.tac[1],ph:L.ppg[0],pa:L.ppg[1],nh:L.pim[0]/2,na:L.pim[1]/2,yh:L.sty?L.sty[0]:'BAL',ya:L.sty?L.sty[1]:'BAL'};
   const win=L.sc[0]>L.sc[1]?0:1;
   if(stats){
     [0,1].forEach(k=>{const t=T(tm[k]);t.pim+=L.pim[k];t.ppo+=L.ppo[k];t.ppg+=L.ppg[k];t.pko+=L.ppo[1-k];t.ppga+=L.ppg[1-k];});
@@ -1322,6 +1404,7 @@ function poDay(liveRes){
     const h=homeA?s.a:s.b,a=homeA?s.b:s.a;
     const r=mine?(liveRes||quickUser(h,a,'po')):simGame(h,a,C,false);
     const aWon=homeA?r.gh>r.ga:r.ga>r.gh;aWon?s.wa++:s.wb++;
+    styRec(h,r.yh,r.gh>r.ga);styRec(a,r.ya,r.ga>r.gh);
     if(r.h===S.user||r.a===S.user){userRes(r);finDay(r.h===S.user,true,C);}
     if(s.wa===4||s.wb===4){const w=s.wa===4?s.a:s.b,l=s.wa===4?s.b:s.a;if(w===S.user)news(`Серия выиграна у «${T(l).name}» ${Math.max(s.wa,s.wb)}:${Math.min(s.wa,s.wb)}.`);if(l===S.user)news(`Вылет: «${T(w).name}» сильнее в серии.`);}
   });
@@ -1663,6 +1746,7 @@ function nextFADay(){
   news(S.off.day>FA_DAYS?'Рынок свободных агентов закрыт. Можно начинать сезон.':`День ${S.off.day} рынка свободных агентов.`);
 }
 function startSeason(){
+  S.teams.forEach(t=>{if(t.id!==S.user){ensureSty(t);t.sty=styRank(t)[0];t.styF=[];}});
   const n=rcount(S.user),pay=payroll(S.user);
   if(n>MAX_ROSTER)return toast(`В составе ${n} игроков. Максимум ${MAX_ROSTER}: расторгните или обменяйте лишних.`);
   if(n<MIN_ROSTER)return toast(`В составе ${n} игроков. Нужно минимум ${MIN_ROSTER}.`);
@@ -1805,6 +1889,12 @@ function load(){try{const s=localStorage.getItem(KEY);if(s){const o=JSON.parse(s
 
 /* ---------- changelog ---------- */
 const CHANGES=[
+  {v:'2026-11-05h',d:'5 ноября',t:'Стили игры',items:[
+    'Вместо ползунка — пять стилей: Форчекинг, Владение, Ловушка, Контратака и Баланс. Каждый бьёт один стиль и уступает другому.',
+    'Сила стиля зависит от ваших игроков: чем больше сильных игроков с подходящими ролями, тем больше эффект — от 5 до 10% к шансу победы.',
+    'Риск в пять ступеней: от «Осторожно» до «Ва-банк».',
+    'Любимый стиль соперника виден перед матчем и в карточке клуба. Клубы меняют стиль, если он долго не работает, и могут подстроиться, если вы всё время играете одинаково.',
+    'Переключатель «Снимать вратаря»: в конце матча при −1 или −2 выходит шестой полевой. Появились голы в пустые ворота.']},
   {v:'2026-11-05g',d:'5 ноября',t:'Обучение обновлено',items:['Обучение и подсказки рассказывают про позиции (ЛН/Ц, ЛЗ, ПЗ) и три режима автосборки звеньев.','Подсказка трансляции — про номера игроков и окно гола. Обновлённые подсказки покажутся ещё раз.','В словаре новые термины: «Позиции» и «Сыгранность».']},
   {v:'2026-11-05f',d:'5 ноября',t:'Вторая позиция без штрафа',items:[
     'На второй позиции игроки играют без штрафа.',
@@ -1848,7 +1938,7 @@ const TOUR=[
   {t:null,title:'Добро пожаловать, генеральный менеджер!',text:'Вы управляете хоккейным клубом: собираете состав, подписываете контракты, меняетесь с другими клубами и следите за деньгами. Матчи играют сами, ваша работа — решения. Покажу главное за минуту.',first:true},
   {tab:'club',t:'cap',title:'Потолок зарплат',text:'Главное правило лиги: сумма зарплат всех игроков не может быть больше потолка. Полоса показывает, сколько уже потрачено. «Свободно» — сколько ещё можно добавить. «Касса» — деньги клуба на улучшения и разовые траты, это другое.'},
   {tab:'club',t:'match',title:'Матчи',text:'«Смотреть матч» — трансляция на схеме площадки, около 4 минут, с перемоткой. «Сыграть быстро» — сразу результат. Кнопки ниже проматывают сразу несколько дней. За сезон 82 матча, лучшие 8 команд конференции выходят в плей-офф.'},
-  {tab:'club',t:'tactic',title:'Тактика',text:'Ползунок от обороны к атаке. Против сильных закрывайтесь, против слабых атакуйте. Если не хотите думать — оставьте «Авто», игра подберёт сама.'},
+  {tab:'club',t:'tactic',title:'Тактика',text:'Выберите стиль игры. Каждый стиль бьёт один и уступает другому: Форчекинг бьёт Владение, Владение — Ловушку, Ловушка — Контратаку, Контратака — Форчекинг. Чем лучше стиль подходит вашим игрокам, тем сильнее эффект. Любимый стиль соперника показан здесь же. «Авто» подбирает стиль под ваш состав, но не под соперника.'},
   {tab:'fin',t:'owner',title:'Владелец и его цель',text:'Каждый сезон владелец ставит цель: выйти в плей-офф, пройти раунд или набрать очки. Выполнили — доверие растёт, провалили — падает. Первые 2 сезона он прощает ошибки вдвое легче, так что можно учиться.'},
   {tab:'fin',t:'spon',title:'Спонсоры — первое дело',text:'Спонсоры приносят деньги каждый день сезона. Сейчас слоты пустые: после обучения выберите предложения здесь. Не уверены — берите «Стабильный».'},
   {tab:'roster',t:'rs-seg',title:'Состав и позиции',text:'Во вкладке «Игроки» весь ваш состав. У каждого своя позиция: Ц, ЛН, ПН, а защитники — левые (ЛЗ) и правые (ПЗ). Значок вроде «ЛН/Ц» значит, что игрок без штрафа играет и там, и там. В «Звеньях» вы ставите игроков в тройки и пары или жмёте автосборку: «Сильнейшие», «Связки ролей» или «Сохранить сыгранность».'},
@@ -1871,6 +1961,8 @@ const GLOSS=[
   ['Касса','Деньги клуба. Тратятся на улучшения, сборы, лагеря, бонусы агентам. Зарплаты списываются отсюда же по ходу сезона.'],
   ['Рейтинг и потенциал','Рейтинг — текущая сила игрока. Потенциал — до чего он может вырасти. Молодые растут, после 33 лет начинается спад.'],
   ['Позиции','Ц — центральный, ЛН и ПН — крайние нападающие, ЛЗ и ПЗ — левый и правый защитник, В — вратарь. «ЛН/Ц» — у игрока две позиции, на обеих он играет без штрафа.'],
+  ['Стиль игры','Форчекинг, Владение, Ловушка, Контратака или Баланс. Каждый стиль бьёт один и уступает другому, это до 10% к шансу победы. «Подходит» — насколько роли и рейтинг ваших игроков подходят стилю.'],
+  ['Риск','Пять ступеней от «Осторожно» до «Ва-банк». Осторожная игра — меньше голов с обеих сторон, выгодна слабому. Ва-банк — больше голов, выгоден сильному.'],
   ['Звено и связка','Тройка нападающих или пара защитников. Связка — удачное сочетание ролей, даёт бонус к силе.'],
   ['Сыгранность','Растёт, пока одни и те же игроки играют вместе в звене. Перестановка звена целиком на другую строчку её не сбрасывает, замена игрока — сбрасывает.'],
   ['Терпение','Сколько отказов игрок готов вытерпеть в переговорах. На нуле он закрывает переговоры до конца окна.'],
@@ -2105,17 +2197,28 @@ function divTable(){
 }
 function recentStrip(){
   if(!S.recent.length)return '';
-  return `<div class="results">${S.recent.slice(0,8).map(r=>`<span class="res ${r.w?'w':'l'}" title="тактика ${r.tac} против ${r.otac}">${r.w?'В':'П'} ${r.us}:${r.them}${r.ot?' ОТ':''} ${tl(T(r.opp),16)}</span>`).join('')}</div>`;
+  return `<div class="results">${S.recent.slice(0,8).map(r=>`<span class="res ${r.w?'w':'l'}" title="${r.sty&&STY[r.sty]?`стиль ${STY[r.sty].n} против ${STY[r.osty].n}`:''}">${r.w?'В':'П'} ${r.us}:${r.them}${r.ot?' ОТ':''} ${tl(T(r.opp),16)}</span>`).join('')}</div>`;
+}
+function oppStyHTML(o){
+  ensureSty(o);const l=o.styL,n=l.filter(x=>x===o.sty).length;
+  return `<p class="small">${o.city} ${o.name}: любимый стиль — <b>${STY[o.sty].n}</b>${l.length?` (${n} из ${l.length} последних матчей) · последние: ${l.slice(0,5).map(x=>STY[x].s).join(' ')}`:''}. Иногда меняют стиль или подстраиваются под ваш.</p>`;
+}
+function tacControls(opp,home,lead,now){
+  const o=T(opp),f=fitsAll(S.user),cur=userStyle(),ex=now||ensureSty(o).sty,fo=styFit(opp,ex);
+  const rec=nearRisk(clamp(recTac(S.user,opp,null,home)-(lead||0),1,10)),risk=S.styAuto?rec:(S.risk||3);
+  const btn=k=>{const m=styM(k,ex);return `<button class="sty${cur===k?' on':''}" data-a="sty" data-id="${k}" aria-pressed="${cur===k}"><b>${STY[k].n}</b><small>${k==='BAL'?'для любого состава':`подходит ${Math.round(f[k]*100)}%`}</small>${m?`<i class="${m>0?'ok':'bad'}">${m>0?'бьёт':'уступает'} «${STY[ex].n}»</i>`:'<i class="muted">нейтрально</i>'}</button>`;};
+  const pct=styWinPct(cur,ex,f[cur],fo);
+  return `${oppStyHTML(o)}
+  <div class="stys">${STK.map(btn).join('')}</div>
+  <p class="small muted"><b>${STY[cur].n}.</b> ${STY[cur].d}${cur!=='BAL'?` Бьёт «${STY[BEATS[cur]].n}», уступает «${STY[beatenBy(cur)].n}».`:''}${pct?` Против ${now?'их стиля в этом матче':'их любимого стиля'}: <b class="${pct>0?'ok':'bad'}">${pct>0?'+':'−'}${Math.abs(pct)}%</b> к шансу победы.`:''}</p>
+  <small class="muted">Риск</small>
+  <div class="seg five">${[1,2,3,4,5].map(i=>`<button data-a="risk" data-id="${i}" aria-pressed="${risk===i}">${RISKN[i]}</button>`).join('')}</div>
+  <div class="seg"><button data-a="styAuto" data-id="1" aria-pressed="${!!S.styAuto}">Авто</button><button data-a="styAuto" data-id="0" aria-pressed="${!S.styAuto}">Вручную</button></div>
+  <div class="tgl-row"><span class="small">Снимать вратаря в конце при −1 и −2</span><div class="seg"><button data-a="pullG" data-id="1" aria-pressed="${S.pullG!==false}">Да</button><button data-a="pullG" data-id="0" aria-pressed="${S.pullG===false}">Нет</button></div></div>
+  <p class="small muted">${S.styAuto?'«Авто» выбирает стиль под ваш состав, но не под соперника, а риск — под силу соперника и счёт. Нажмите на стиль или риск, чтобы выбрать вручную.':`Риск: осторожная игра снижает число голов и выгодна слабому, ва-банк открывает игру и выгоден сильному. Сейчас рекомендуем: ${RISKN[rec].toLowerCase()}.`}</p>`;
 }
 function tacticCard(opp,home){
-  const rec=recTac(S.user,opp,null,home),ot=tacFor(opp,S.user,null,!home),o=T(opp);
-  const cur=S.tacAuto?rec:S.tac;
-  return `<section class="card" data-tut="tactic"><h2>Тактика<span>против ${o.city}</span></h2>
-  <div class="chance"><span>${S.tacAuto?'Авто под соперника':'Ваш выбор'}</span><b id="tacLbl" style="font-size:16px">${cur} · ${TACN[cur]}</b></div>
-  <input type="range" id="tac" min="1" max="10" step="1" value="${cur}" aria-label="Стиль игры" ${S.tacAuto?'disabled':''}>
-  <div class="tac-ends"><span>Полная оборона</span><span>Всё в атаку</span></div>
-  <div class="seg"><button data-a="tacAuto" data-id="1" aria-pressed="${S.tacAuto}">Авто под соперника</button><button data-a="tacAuto" data-id="0" aria-pressed="${!S.tacAuto}">Вручную</button></div>
-  <p class="small muted">Рекомендуем ${rec} (${TACN[rec].toLowerCase()}). ${o.city}: ${gmLbl(o)}, ожидаемая тактика ${ot}. Атака открывает игру для обеих команд: выгодна сильному. Оборона снижает число голов и увеличивает роль случая: выгодна слабому. При обороне команда чаще фолит.</p></section>`;
+  return `<section class="card" data-tut="tactic"><h2>Тактика<span>против ${T(opp).city}</span></h2>${tacControls(opp,home,0)}</section>`;
 }
 function offersCard(){
   if(!S.offers.length)return '';
@@ -2442,7 +2545,7 @@ function sheetTeam(t){
   const r=allR()[t.id],conf=S.teams.filter(x=>x.conf===t.conf).sort(cmpStand),pl=conf.findIndex(x=>x.id===t.id)+1;
   const ros=active(t.id),groups=[['Центральные','C'],['Левые нападающие','LW'],['Правые нападающие','RW'],['Защитники','D'],['Вратари','G']];
   const mine=t.id===S.user,rights=rightsOf(t.id).length;
-  return `<div class="stack"><div style="display:flex;gap:14px;align-items:center">${badge(t,80)}<div style="min-width:0"><h3>${t.name}</h3><p class="sub">${t.city} · ${flag(t.nat)} · ${CONF[t.conf]}, ${DIVS[t.div]}</p>${mine?'<p class="small ok">Ваш клуб</p>':`<p class="small"><b>${gmLbl(t)}.</b> ${OWN[t.own].d}</p>`}</div></div>
+  return `<div class="stack"><div style="display:flex;gap:14px;align-items:center">${badge(t,80)}<div style="min-width:0"><h3>${t.name}</h3><p class="sub">${t.city} · ${flag(t.nat)} · ${CONF[t.conf]}, ${DIVS[t.div]}</p>${mine?'<p class="small ok">Ваш клуб</p>':`<p class="small"><b>${gmLbl(t)}.</b> ${OWN[t.own].d}</p><p class="small">Любимый стиль: <b>${STY[ensureSty(t).sty].n}</b>${t.styL.length?` · последние: ${t.styL.slice(0,5).map(x=>STY[x].s).join(' ')}`:''}</p>`}</div></div>
   <div class="kv"><div><small>Место</small><b>${pl}-е</b></div><div><small>Очки</small><b>${pts(t)}</b></div><div><small>Сила</small><b>${r.t.toFixed(1)}</b></div></div>
   <div class="kv"><div><small>Зарплаты</small><b>${money(payroll(t.id))}</b></div><div><small>Свободно</small><b>${money(S.cap-payroll(t.id))}</b></div><div><small>Игроков</small><b>${ros.length}${rights?` +${rights}`:''}</b></div></div>
   ${!mine&&canMarket()?`<button class="btn blue" data-a="tradeWith" data-id="${t.id}">Предложить обмен</button>`:''}
@@ -2625,6 +2728,10 @@ function act(a,id){
     case 'play':{if(S.live)break;const to=id==='end'?DAYS:id==='dl'?DEADLINE:Math.min(DAYS,S.day+n);while(S.phase==='regular'&&S.day<to)playDay();break;}
     case 'po':{if(S.live)break;if(id==='end'){let g=0;while(S.phase==='playoffs'&&g++<200)poDay();}else poDay();break;}
     case 'tacAuto':S.tacAuto=id==='1';break;
+    case 'sty':S.sty=id;if(S.styAuto){S.styAuto=false;S.risk=S.risk||3;}break;
+    case 'risk':if(S.styAuto){S.styAuto=false;S.sty=userStyleAuto();}S.risk=Number(id);break;
+    case 'styAuto':if(id==='0'&&S.styAuto)S.sty=userStyleAuto();S.styAuto=id==='1';break;
+    case 'pullG':S.pullG=id==='1';break;
     case 'toOff':startOffseason();break;
     case 'leave':leaveClub();break;
     case 'endResign':finishResign();if(S.off.step==='draft'){U.tab='market';U.mk='draft';window.scrollTo(0,0);}break;
@@ -2714,6 +2821,7 @@ const tgHaptic=k=>{try{TG&&TG.HapticFeedback&&(k==='goal'?TG.HapticFeedback.noti
 function boot(data){
   tgInit();
   S=(data&&data.S)||load();
+  if(S&&S.sty===undefined){S.sty='BAL';S.styAuto=S.tacAuto!==false;S.risk=nearRisk(S.tac||5.5);S.pullG=true;}
   if(S&&S.players)S.players.forEach(p=>{if(p.pos2===undefined||(p.pos==='D'&&!p.sd))rollPos2(p);});
   if(!S)newWorld();
   document.addEventListener('click',e=>{const el=e.target.closest('[data-a]');if(!el||el.disabled)return;if(el.dataset.a==='veil'&&e.target!==el)return;act(el.dataset.a,el.dataset.id);});
@@ -2933,13 +3041,10 @@ function liveInfo(L){
   const seg=`<div class="seg"><button data-a="lseg" data-id="feed" aria-pressed="${U.mv.seg==='feed'}">Трансляция</button><button data-a="lseg" data-id="stats" aria-pressed="${U.mv.seg==='stats'}">Статистика</button></div>`;
   let top='';
   if(L.pause){
-    const me=L.h===S.user?0:1,lead=L.sc[me]-L.sc[1-me],opp=me?L.h:L.a,rec=clamp(recTac(S.user,opp,null,me===0)-lead,1,10),cur=S.tacAuto?rec:S.tac;
+    const me=L.h===S.user?0:1,lead=L.sc[me]-L.sc[1-me],opp=me?L.h:L.a;
     top=`<section class="card hl"><h2>${L.per===4?'Перед овертаймом':`Перерыв после ${L.per-1}-го периода`}<span>${L.sc[0]}:${L.sc[1]}</span></h2>
-    <p class="small">${lead>0?`Ведём ${lead>1?'с запасом':'в одну шайбу'}: можно сместиться к обороне.`:lead<0?'Проигрываем: стоит добавить в атаке.':'Ничья: держим баланс или рискуем.'} Рекомендуем ${rec} (${TACN[rec].toLowerCase()}).</p>
-    <div class="chance"><span>${S.tacAuto?'Авто под соперника и счёт':'Ваш выбор'}</span><b id="ltacLbl" style="font-size:16px">${cur} · ${TACN[cur]}</b></div>
-    <input type="range" id="ltac" min="1" max="10" step="1" value="${cur}" aria-label="Стиль игры" ${S.tacAuto?'disabled':''}>
-    <div class="tac-ends"><span>Полная оборона</span><span>Всё в атаку</span></div>
-    <div class="seg"><button data-a="tacAuto" data-id="1" aria-pressed="${S.tacAuto}">Авто</button><button data-a="tacAuto" data-id="0" aria-pressed="${!S.tacAuto}">Вручную</button></div>
+    <p class="small">${lead>0?`Ведём ${lead>1?'с запасом':'в одну шайбу'}: можно играть осторожнее.`:lead<0?'Проигрываем: стоит рискнуть.':'Ничья: держим баланс или рискуем.'} Соперник играет: <b>${STY[L.sty?L.sty[1-me]:'BAL'].n}</b>.</p>
+    ${tacControls(opp,me===0,lead,L.sty?L.sty[1-me]:null)}
     <div class="btn-row"><button class="btn" data-a="llines">${U.mv.lines?'Скрыть звенья':'Поменять звенья'}</button><button class="btn pri" data-a="lres">Продолжить</button></div></section>
     ${U.mv.lines?viewLines():''}`;
   }else if(L.done){
