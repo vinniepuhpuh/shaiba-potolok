@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
-<title>Шайба и потолок</title>
+<title>Генменеджер</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Unbounded:wght@600;800&display=swap">
@@ -27,6 +27,7 @@
 .wn-h b{font:800 15px var(--fd)}
 .wn-h small{color:var(--muted);font:500 12px var(--fm)}
 .wn ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:14px}
+.pick-hero .hero-sub{margin-top:4px;color:var(--board-ink);font:600 13px var(--fb);letter-spacing:.14em;text-transform:uppercase;opacity:.75}
 </style>
 <style>
 /* Layout: one-column phone app. Scoreboard header on top, scrolling content, tab bar pinned to the bottom. */
@@ -1693,6 +1694,7 @@ function load(){try{const s=localStorage.getItem(KEY);if(s){const o=JSON.parse(s
 
 /* ---------- changelog ---------- */
 const CHANGES=[
+  {v:'2026-11-05d',d:'5 ноября',t:'Новое имя',items:['Игра теперь называется «Генменеджер — хоккейный симулятор».','Окно «Что нового» после каждого обновления и в меню «⋯».']},
   {v:'2026-11-05c',d:'5 ноября',t:'Живой матч',items:[
     'Всплывающее окно гола: кто забил, кто отдал передачи, счёт и время.',
     'На схеме площадки у игроков номера, у вратарей — пунктирная обводка.',
@@ -2287,7 +2289,7 @@ function viewPick(){
   const R_=allR();
   const card=t=>`<button class="tcard" data-a="preview" data-id="${t.id}" ${t.id===S.prevUser?'disabled style="opacity:.4"':''}>${badge(t,52)}<div><small>${t.city}</small><b>${t.name}</b><small class="num">сила ${R_[t.id].t.toFixed(1)} · своб. ${money(S.cap-payroll(t.id))}</small></div></button>`;
   const hero=S.prevUser!=null?`<h1>Новая работа</h1><p>«${T(S.prevUser).name}» с вами расстались. Выберите новый клуб: касса и улучшения у него свои, владелец даёт вам кредит доверия 50/100 и испытательный срок.</p>`:
-  `<h1>Шайба и потолок</h1><p>Хоккейный менеджер про трансферы, потолок зарплат и деньги клуба. 32 клуба от Калининграда до Харбина: выберите свой и соберите чемпиона.</p>`;
+  `<h1>Генменеджер</h1><p class="hero-sub">хоккейный симулятор</p><p>Трансферы, потолок зарплат и деньги клуба. 32 клуба от Калининграда до Харбина: выберите свой и соберите чемпиона.</p>`;
   return `<header class="pick-hero gut">${hero}</header>
   <main class="gut">${[0,1,2,3].map(d=>`<section><div class="divh">${CONF[d<2?0:1]} конференция · ${DIVS[d]} дивизион</div><div class="tgrid">${S.teams.filter(t=>t.div===d).map(card).join('')}</div></section>`).join('')}</main>`;
 }
