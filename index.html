@@ -9,6 +9,18 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Unbounded:wght@600;800&display=swap">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font-size:14px}img{max-width:100%}[hidden]{display:none!important}.feed li.post div{color:var(--warn)}
+
+.gpop{position:fixed;left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));top:calc(96px + env(safe-area-inset-top,0px));max-width:528px;margin:0 auto;z-index:4;background:var(--surface);color:var(--ink);border-radius:16px;padding:12px 14px;box-shadow:0 10px 30px #0007;border:2px solid var(--red);display:flex;flex-direction:column;gap:4px;pointer-events:none}
+.gpop.on{animation:gpin .35s cubic-bezier(.2,1.4,.4,1)}
+.gp-h{display:flex;align-items:center;gap:10px}
+.gp-t{flex:1;min-width:0}
+.gp-t b{display:block;font:800 22px/1 var(--fd);color:var(--red);letter-spacing:.02em}
+.gp-t small{color:var(--muted);font-size:12.5px}
+.gp-sc{font:600 26px var(--fm)}
+.gp-n{font-weight:700;font-size:17px;display:flex;align-items:center;gap:8px}
+.gp-num{display:inline-grid;place-items:center;min-width:30px;height:24px;border-radius:6px;background:var(--ink);color:var(--surface);font:700 14px var(--fm);padding:0 4px}
+@keyframes gpin{from{transform:translateY(-14px) scale(.96);opacity:0}to{transform:none;opacity:1}}
+.mv{position:fixed}
 </style>
 <style>
 /* Layout: one-column phone app. Scoreboard header on top, scrolling content, tab bar pinned to the bottom. */
@@ -1048,6 +1060,7 @@ function newLive(h,a,kind){
   return {key:S.nid++,h,a,kind,tick:0,per:1,sc:[0,0],pg:[[0,0],[0,0],[0,0],[0,0]],psh:[[0,0],[0,0],[0,0],[0,0]],pen:[[],[]],ppo:[0,0],ppg:[0,0],pim:[0,0],zt:[0,0],ev:[],ps:{},gk:[{sa:0,ga:0},{sa:0,ga:0}],shift:[null,null],pause:null,done:false,so:false,ot:false,vis:{poss:0,zone:'neu',shot:null,goal:null},tac:[5,5],R:null,fin:false};
 }
 function prep(L){
+  ensureNums(L.h);ensureNums(L.a);
   const M=idx(),C={};C[L.h]=teamCtx(L.h,M);C[L.a]=teamCtx(L.a,M);
   const H=C[L.h],A=C[L.a];
   const lead=L.sc[0]-L.sc[1],late=L.per>=3?1:L.per===2?.5:0;
@@ -1115,7 +1128,9 @@ function stepTick(L){
       if(R()<.88){const a1=wPickId(ice[k],X[k].w,'wa',sid);if(a1){lstat(L,a1,k).a++;as.push(a1);if(R()<.62){const rest=ice[k].filter(i=>i!==a1);const a2=wPickId(rest,X[k].w,'wa',sid);if(a2){lstat(L,a2,k).a++;as.push(a2);}}}}
       if(!pp&&n[k]===n[1-k]){ice[k].forEach(i=>lstat(L,i,k).pm++);ice[1-k].forEach(i=>lstat(L,i,1-k).pm--);}
       if(pp)L.pen[1-k].shift();
+      L.lg={k,sid,as:as.slice(),pp,sh:!pp&&n[k]>n[1-k],per:L.per,sc:L.sc.slice()};
       evAdd(L,'goal',k,`Гол! ${nm(M.get(sid))}${as.length?` (${as.map(i=>M.get(i).l).join(', ')})`:''}${pp?', в большинстве':n[k]>n[1-k]?', в меньшинстве':''} · ${L.sc[0]}:${L.sc[1]}`);
+      L.lg.s=L.ev[L.ev.length-1].s;
       if(ot){L.done=true;L.ot=true;}
     }else if(R()<.035){
       post=k;lstat(L,sid,k).sh--;L.psh[L.per-1][k]--;L.gk[1-k].sa--;
@@ -1126,7 +1141,7 @@ function stepTick(L){
   const poss=shot!=null?shot:(R()<sr[0]/(sr[0]+sr[1]||1)?0:1);
   const zone=shot!=null?'off':R()<.42?'off':R()<.55?'neu':'def';
   if(zone==='off')L.zt[poss]++;
-  L.vis={poss,zone,shot,goal,post};
+  L.vis={poss,zone,shot,goal,post,ice:[ice[0].slice(),ice[1].slice()]};
   L.tick++;
   if(L.done)return endLive(L);
   if(!ot&&L.tick%TPP===0){
@@ -2367,6 +2382,7 @@ function sheetMenu(){
 /* ---------- render ---------- */
 function render(){
   inv();
+  if(U.startT){U.startT=false;startTimer();}
   const app=document.getElementById('app');
   let html;
   if(S.user==null)html=viewPick();
@@ -2397,6 +2413,7 @@ function render(){
   const mv2=document.getElementById('mv');if(mv2)mv2.scrollTop=my;
   const sh2=document.querySelector?document.querySelector('.sheet'):null;if(sh2&&U.keepSheet)sh2.scrollTop=shy;U.keepSheet=false;
   document.body.style.overflow=liveOn?'hidden':'';
+  if(liveOn){aniStart();dotLabels(S.live);}
   if(U.startT){U.startT=false;startTimer();}
   tgSync();
   if(U.tour)requestAnimationFrame(tourPlace);
@@ -2410,11 +2427,11 @@ function act(a,id){
   const seq0=S.nseq||0;
   const n=Number(id),F=S.fin;
   switch(a){
-    case 'watch':{if(S.live)break;const g=userGameToday();if(!g)break;S.live=newLive(g.h,g.a,g.kind);prep(S.live);U.mv={seg:'feed',spd:U.mv?U.mv.spd:0,lines:false};U.startT=true;ambStart();break;}
+    case 'watch':{if(S.live)break;const g=userGameToday();if(!g)break;S.live=newLive(g.h,g.a,g.kind);prep(S.live);aniReset();U.mv={seg:'feed',spd:U.mv?U.mv.spd:0,lines:false};U.startT=true;ambStart();break;}
     case 'lpp':if(_timer)stopTimer();else U.startT=true;break;
     case 'lspd':U.mv.spd=(U.mv.spd+1)%3;if(_timer)U.startT=true;break;
-    case 'lskip':{stopTimer();runLive(S.live,id==='1'?TPP:id==='2'?2*TPP:null);U.mv.lines=false;break;}
-    case 'lres':{const L=S.live;L.pause=null;prep(L);U.mv.lines=false;U.startT=true;break;}
+    case 'lskip':{stopTimer();runLive(S.live,id==='1'?TPP:id==='2'?2*TPP:null);U.mv.lines=false;if(ANI){ANI.foNext=true;planPhase(S.live,true);}break;}
+    case 'lres':{const L=S.live;L.pause=null;prep(L);U.mv.lines=false;U.startT=true;if(ANI){ANI.foNext=true;planPhase(L,true);}break;}
     case 'llines':U.mv.lines=!U.mv.lines;break;
     case 'lseg':U.mv.seg=id;break;
     case 'lend':{stopTimer();ambStop();const L=S.live;const r_=finishLive(L);S.live=null;U.mv=null;if(L.kind==='reg')playDay(r_);else poDay(r_);break;}
@@ -2555,6 +2572,7 @@ function startTimer(){stopTimer();const L=S.live;if(!L||L.done||L.pause)return;_
 function liveTick(){
   const L=S.live;if(!L||L.done||L.pause){stopTimer();save();render();return;}
   const wasP=L.pause;stepTick(L);
+  if(!L.done)planPhase(L);if(L.vis&&L.vis.goal!=null)showGoal(L);
   if(L.vis&&L.vis.goal!=null){tgHaptic('goal');sfx('shot');setTimeout(()=>sfx('goal'),90);}else if(L.vis&&L.vis.post!=null){sfx('shot');setTimeout(()=>sfx('post'),70);}else if(L.vis&&L.vis.shot!=null){sfx('shot');setTimeout(()=>sfx('save'),120);}
   if(L.pause&&!wasP)sfx('whistle');
   if(L.done){sfx('whistle');const me=L.h===S.user?0:1;setTimeout(()=>sfx(L.sc[me]>L.sc[1-me]?'win':'loss'),700);}
@@ -2569,57 +2587,175 @@ function clockTxt(L){
   const base=ot?3:5,str=n0!==n1?` · ${base-n0+(ot&&n1>n0?1:0)} на ${base-n1+(ot&&n0>n1?1:0)}`:'';
   return `${ot?'Овертайм':L.per+'-й период'} · ${mmss((len-pt)*20)}${str}`;
 }
-function hiddenIdx(L,k){
-  const ot=L.per===4,m=L.pen[k].length,o=L.pen[1-k].length;
-  const vis=clamp((ot?3:5)-m+(ot&&o>m?1:0),3,5);
-  return [2,4,1].slice(0,5-vis);
+/* ---------- rink animation: tactical sets + continuous motion ---------- */
+const RX=(X,d)=>d>0?11+X*178:189-X*178,RY=(Y,d)=>45+d*Y*38;
+const SETS={
+  cycle:{a:[[.94,-.62],[.97,.12],[.80,-.05],[.67,-.55],[.67,.5]],d:[[.72,-.5],[.84,.05],[.72,.5],[.92,-.42],[.9,.12]]},
+  overload:{a:[[.84,-.78],[.92,-.42],[.9,.14],[.68,-.62],[.66,.12]],d:[[.74,-.55],[.86,-.2],[.72,.35],[.9,-.5],[.9,.1]]},
+  point:{a:[[.86,-.5],[.9,.02],[.86,.58],[.67,-.45],[.66,.38]],d:[[.72,-.45],[.84,0],[.72,.42],[.9,-.2],[.9,.22]]},
+  onetimer:{a:[[.82,-.6],[.91,.04],[.8,.52],[.67,-.4],[.67,.42]],d:[[.73,-.4],[.84,.1],[.74,.5],[.9,-.25],[.89,.25]]},
+  behind:{a:[[1.0,.02],[.86,-.25],[.85,.3],[.68,-.5],[.67,.45]],d:[[.75,-.5],[.86,0],[.75,.45],[.93,-.25],[.93,.25]]},
+  netfront:{a:[[.83,-.45],[.92,.0],[.83,.48],[.68,-.35],[.7,.4]],d:[[.75,-.4],[.89,.08],[.76,.42],[.91,-.12],[.88,.3]]},
+  rush3:{a:[[.62,-.62],[.6,0],[.62,.62],[.42,-.3],[.42,.3]],d:[[.5,-.5],[.46,.05],[.5,.5],[.74,-.25],[.74,.25]]},
+  rush21:{a:[[.74,-.3],[.72,.32],[.5,0],[.4,-.35],[.38,.4]],d:[[.58,-.45],[.52,.2],[.6,.55],[.82,0],[.64,-.1]]},
+  regroup:{a:[[.45,-.75],[.36,0],[.45,.75],[.22,-.3],[.24,.3]],d:[[.62,-.4],[.56,0],[.62,.4],[.78,-.3],[.78,.3]]},
+  dump:{a:[[.7,-.6],[.62,0],[.66,.55],[.48,-.3],[.48,.3]],d:[[.6,-.5],[.66,.1],[.62,.5],[.92,-.45],[.84,.2]]},
+  breakout:{a:[[.3,-.85],[.2,.05],[.3,.85],[.04,.15],[.1,-.5]],d:[[.14,.25],[.22,-.4],[.38,0],[.55,-.35],[.55,.35]]},
+  stretch:{a:[[.58,-.8],[.25,0],[.6,.75],[.1,-.35],[.12,.3]],d:[[.3,-.3],[.4,.2],[.5,-.2],[.7,-.3],[.7,.35]]},
+  trap:{a:[[.4,-.55],[.35,0],[.42,.55],[.2,-.3],[.2,.3]],d:[[.52,0],[.62,-.5],[.62,.5],[.78,-.3],[.78,.3]]},
+  pp131:{a:[[.8,-.62],[.84,0],[.8,.62],[.66,0],[.93,.03]],d:[[.76,-.3],[.76,.3],[.88,-.25],[.88,.25]]},
+  ppum:{a:[[.82,-.6],[.92,.02],[.82,.6],[.66,-.2],[.66,.22]],d:[[.76,-.32],[.76,.32],[.88,-.22],[.88,.22]]},
+  ppov:{a:[[.84,-.72],[.94,-.35],[.88,.1],[.68,-.55],[.7,.35]],d:[[.78,-.45],[.8,.1],[.9,-.3],[.9,.12]]},
+  pkd:{a:[[.8,-.6],[.86,.1],[.8,.6],[.66,-.25],[.67,.3]],d:[[.72,0],[.82,-.32],[.82,.32],[.9,0]]},
+  ot3:{a:[[.85,-.45],[.62,.1],[.78,.5]],d:[[.88,0],[.76,-.4],[.7,.35]]},
+  ot3b:{a:[[.7,-.3],[.68,.35],[.4,0]],d:[[.8,-.05],[.55,-.4],[.52,.3]]},
+  fo:{a:[[.47,-.3],[.488,0],[.47,.3],[.36,-.3],[.36,.3]],d:[[.53,-.3],[.512,0],[.53,.3],[.64,-.3],[.64,.3]]}
+};
+const PICK={
+  shot:[['point',3],['onetimer',3],['netfront',2],['behind',1],['cycle',1]],
+  off:[['cycle',3],['overload',3],['behind',2],['onetimer',1],['netfront',2]],
+  neu:[['rush3',3],['rush21',2],['regroup',2],['trap',2],['dump',2],['stretch',1]],
+  def:[['breakout',3],['stretch',1],['regroup',1]],
+  pp:[['pp131',3],['ppum',3],['ppov',2]],
+  pk:[['pkd',2]]
+};
+let ANI=null,gpT=null;
+function aniReset(){ANI={cur:[[],[]],tgt:[[],[]],ids:[[],[]],pk:{path:[[100,45]],car:[null],t0:0,dur:1},set:null,foNext:true,last:0,raf:null,sw:[[0,1,2,3,4,5].map(()=>[Math.random()*6,0.6+Math.random()*.6]),[0,1,2,3,4,5].map(()=>[Math.random()*6,0.6+Math.random()*.6])]};}
+const POSORD={LW:0,C:1,RW:2,D:3,G:4};
+function ensureNums(tid){
+  const used=new Set(),GN=[1,30,31,33,35,29,40,70,72,80,39,32];
+  active(tid).sort((a,b)=>(a.num?0:1)-(b.num?0:1)).forEach(p=>{
+    if(p.num&&!used.has(p.num)){used.add(p.num);return;}
+    let n;if(p.pos==='G'){n=GN.find(x=>!used.has(x));}let g=0;while(!n||used.has(n)){n=ri(2,98);if(++g>200)break;}p.num=n;used.add(n);
+  });
 }
-function positions(L){
-  const v=L.vis||{poss:0,zone:'neu'},k=v.poss,d=k===0?1:-1,j=()=>(R()-.5)*7;
-  let px,py=14+R()*62;
-  if(v.zone==='off')px=100+d*(48+R()*32);else if(v.zone==='neu')px=100+d*(R()*44-22);else px=100-d*(38+R()*36);
-  const cx=x=>clamp(x,14,186),cy=y=>clamp(y,7,83);
-  const att=[[px,py],[px-d*10,90-py],[px-d*17,45],[px-d*33,25],[px-d*33,65]];
-  const def=[[px+d*5,py+(py<45?9:-9)],[px-d*5,28],[px+d*1,62],[px+d*15,py*.5+21],[px+d*21,py*.5+46]];
-  const pos=[[],[]];
-  pos[k]=att.map(([x,y])=>[cx(x+j()),cy(y+j())]);pos[1-k]=def.map(([x,y])=>[cx(x+j()),cy(y+j())]);
-  pos[0][5]=[15,45+(py-45)*.22];pos[1][5]=[185,45+(py-45)*.22];
-  const hid=[hiddenIdx(L,0),hiddenIdx(L,1)];
-  let puck=[pos[k][0][0]+d*2.5,pos[k][0][1]+1.5];
-  if(v.shot!=null){const s=v.shot,gx=s===0?189:11;puck=v.goal===s?[s===0?192:8,45+(R()-.5)*4]:v.post===s?[s===0?189:11,R()<.5?42:48]:[gx+(s===0?-5:5),45+(R()-.5)*12];}
-  return {pos,puck,hid};
+function txtOn(hex){const c=parseInt(hex.slice(1),16),r=c>>16,g=(c>>8)&255,b=c&255;return (r*299+g*587+b*114)/1000>150?'#111':'#fff';}
+function orderIds(ids){const M={get:P};return ids.slice().map(id=>M.get(id)).filter(Boolean).sort((a,b)=>(POSORD[a.pos]>=3)-(POSORD[b.pos]>=3)||POSORD[a.pos]-POSORD[b.pos]).map(p=>p.id);}
+function planPhase(L,instant){
+  if(!ANI)aniReset();
+  const v=L.vis||{poss:0,zone:'neu'},X=liveX(L),A=ANI;
+  const dI=t=>L.shift[t]?onIce(L,X,t):[...X[t].f[0],...X[t].d[0]].filter(x=>x!=null&&X[t].w[x]);
+  const ice=v.ice||[dI(0),dI(1)];
+  const n0=L.pen[0].length,n1=L.pen[1].length,ot=L.per===4;
+  let k=v.poss,key,cat;
+  if(A.foNext){key='fo';k=0;A.foNext=false;}
+  else if(ot)key=v.zone==='off'||v.shot!=null?'ot3':'ot3b';
+  else{
+    const pp=k===0?n0<n1:n1<n0,pkp=k===0?n0>n1:n1>n0;
+    if(pp&&(v.zone==='off'||v.shot!=null))cat='pp';
+    else if(pkp)cat=v.zone==='def'?'def':'neu';
+    else cat=v.shot!=null?'shot':v.zone;
+    key=(A.cat===cat&&A.set&&Math.random()<.45)?A.set:pickW(PICK[cat]);A.cat=cat;
+    if(cat==='pk')key='pkd';
+  }
+  if(v.goal!=null)A.foNext=true;
+  A.set=key;
+  const d=k===0?1:-1,S_=SETS[key],j=()=>(Math.random()-.5)*2.4;
+  const att=orderIds(ice[k]),def=orderIds(ice[1-k]);
+  let defT=S_.d;
+  const pkSide=(k===0?n0<n1:n1<n0)&&key.startsWith('pp');
+  if(pkSide&&def.length===3)defT=[[.76,0],[.88,-.25],[.88,.25]];
+  const place=(ids,tmpl,team)=>{
+    A.ids[team]=[0,1,2,3,4].map(i=>ids[i]??null);
+    for(let i=0;i<5;i++){const t=tmpl[i]||[.5+(i-2)*.05,(i%2?-1:1)*.4];A.tgt[team][i]=[clamp(RX(t[0],d)+j(),9,191),clamp(RY(t[1],d)+j(),6,84)];}
+  };
+  place(att,S_.a,k);place(def,defT,1-k);
+  A.ids[0][5]=X[0].g;A.ids[1][5]=X[1].g;
+  // puck path through attackers, ending in the shot outcome
+  const live=[0,1,2,3,4].filter(i=>A.ids[k][i]!=null);
+  const path=[],car=[];
+  const start=A.pk.path.length?pkNow().slice(0,2):[100,45];path.push(start);car.push(null);
+  const nP=key==='fo'?1:1+Math.floor(Math.random()*2);
+  let last=-1;
+  for(let i=0;i<nP&&live.length;i++){let s;do{s=pick(live);}while(s===last&&live.length>1);last=s;path.push(A.tgt[k][s].slice());car.push(s);}
+  if(v.shot!=null){
+    const s=v.shot,gx=s===0?189:11,sd=s===0?1:-1;
+    if(v.goal===s)path.push([gx+sd*3,45+(Math.random()-.5)*4]);
+    else if(v.post===s)path.push([gx,Math.random()<.5?42:48]);
+    else{path.push([gx-sd*4,45+(Math.random()-.5)*6]);path.push([gx-sd*(9+Math.random()*6),45+(Math.random()-.5)*20]);}
+    car.push(null);if(path.length>car.length)car.push(null);
+  }
+  const now=performance.now();
+  A.pk={path,car,t0:now,dur:SPD[U.mv?U.mv.spd:0]*.92,att:k};
+  if(instant){[0,1].forEach(t=>{for(let i=0;i<6;i++){if(A.tgt[t][i])A.cur[t][i]=A.tgt[t][i].slice();}});}
+  // goalies
+  const py=path[path.length-1][1];
+  A.tgt[0][5]=[15,45+(py-45)*.2];A.tgt[1][5]=[185,45+(py-45)*.2];
+  if(!A.cur[0][5])A.cur[0][5]=A.tgt[0][5].slice();if(!A.cur[1][5])A.cur[1][5]=A.tgt[1][5].slice();
+  for(let t=0;t<2;t++)for(let i=0;i<5;i++)if(!A.cur[t][i]&&A.tgt[t][i])A.cur[t][i]=A.tgt[t][i].slice();
+  dotLabels(L);
 }
+function pkNow(){
+  const A=ANI,pk=A.pk,n=pk.path.length;if(n<2)return pk.path[0].slice();
+  const p=clamp((performance.now()-pk.t0)/pk.dur,0,1),segs=n-1,f=p*segs,i=Math.min(segs-1,Math.floor(f)),u=f-i,e=u<.5?2*u*u:1-Math.pow(-2*u+2,2)/2;
+  const a=pk.path[i],b=pk.path[i+1];return [a[0]+(b[0]-a[0])*e,a[1]+(b[1]-a[1])*e,pk.car[i+1]!=null&&u>.75?pk.car[i+1]:pk.car[i]];
+}
+function dotLabels(L){
+  const tm=[T(L.h),T(L.a)];
+  [0,1].forEach(k=>{for(let i=0;i<6;i++){
+    const el=document.getElementById(`dt${k}${i}`);if(!el)continue;
+    const id=ANI.ids[k][i],p=id!=null?P(id):null;
+    el.style.opacity=p?1:0;
+    const tx=el.querySelector('text');if(tx&&p&&tx.textContent!==String(p.num||''))tx.textContent=p.num||'';
+  }});
+}
+const RM=typeof window!=='undefined'&&window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function aniFrame(ts){
+  const A=ANI;if(!A)return;
+  const svg=document.getElementById('rinkS');if(!svg){A.raf=null;return;}
+  const dt=Math.min(.1,(ts-(A.last||ts))/1000);A.last=ts;
+  const spd=1500/SPD[U.mv?U.mv.spd:0],K=(RM?12:2.3)*spd,run=!!_timer,tsec=ts/1000;
+  const pk=pkNow(),carT=pk[2];
+  for(let t=0;t<2;t++)for(let i=0;i<6;i++){
+    const tg=A.tgt[t][i],c=A.cur[t][i];if(!tg||!c)continue;
+    let gx=tg[0],gy=tg[1],kk=K;
+    const attT=A.cur&&A.ids[t][i]!=null&&carT!=null&&i===carT&&t===(A.pk.att??-1);
+    if(attT){gx=pk[0]-(t===0?2.2:-2.2);gy=pk[1]+.8;kk=K*3;}
+    const f=1-Math.exp(-dt*kk);c[0]+=(gx-c[0])*f;c[1]+=(gy-c[1])*f;
+    const sw=A.sw[t][i],amp=i===5?.25:(RM||!run?.35:1.1);
+    const x=c[0]+Math.sin(tsec*sw[1]*2+sw[0])*amp,y=c[1]+Math.cos(tsec*sw[1]*1.6+sw[0]*1.3)*amp*.8;
+    const el=document.getElementById(`dt${t}${i}`);if(el)el.setAttribute('transform',`translate(${x.toFixed(2)} ${y.toFixed(2)})`);
+  }
+  const pe=document.getElementById('puck');if(pe)pe.setAttribute('transform',`translate(${pk[0].toFixed(2)} ${pk[1].toFixed(2)})`);
+  A.raf=requestAnimationFrame(aniFrame);
+}
+function aniStart(){if(!ANI)aniReset();if(!ANI.raf&&typeof requestAnimationFrame!=='undefined')ANI.raf=requestAnimationFrame(aniFrame);}
 function rinkSVG(L){
-  const {pos,puck,hid}=positions(L),tm=[T(L.h),T(L.a)];
-  const dot=(k,i,[x,y])=>{const t=tm[k],g=i===5;
-    return `<g class="dot" id="dt${k}${i}" style="transform:translate(${x}px,${y}px);opacity:${hid[k].includes(i)?0:1}"><circle r="${g?3.9:3.3}" fill="${k?t.c2:t.c1}" stroke="${k?t.c1:'#ffffff'}" stroke-width="${k?1.6:1.1}"/>${g?`<circle r="1.2" fill="${k?t.c1:t.c2}"/>`:''}</g>`;};
+  if(!ANI)aniReset();
+  if(!ANI.tgt[0][0])planPhase(L,true);
+  const tm=[T(L.h),T(L.a)];
+  const dot=(k,i)=>{const t=tm[k],g=i===5,fill=k?t.c2:t.c1,c=ANI.cur[k][i]||[100,45],id=ANI.ids[k][i],p=id!=null?P(id):null;
+    return `<g id="dt${k}${i}" transform="translate(${c[0]} ${c[1]})" style="opacity:${p?1:0}"><circle r="${g?5:4.7}" fill="${fill}" stroke="${k?t.c1:'#ffffff'}" stroke-width="${k?1.4:1}"/>${g?`<circle r="5" fill="none" stroke="${k?t.c1:t.c2}" stroke-width=".7" stroke-dasharray="1.3 1.1"/>`:''}<text y="1.55" text-anchor="middle" font-size="${p&&p.num>9?4.1:4.6}" font-weight="700" font-family="IBM Plex Sans,Arial,sans-serif" fill="${txtOn(fill)}">${p?p.num||'':''}</text></g>`;};
   const fc=(x,y)=>`<circle cx="${x}" cy="${y}" r="9" fill="none" stroke="#e05566" stroke-width=".5" opacity=".7"/><circle cx="${x}" cy="${y}" r=".9" fill="#e05566"/>`;
-  return `<svg viewBox="0 0 200 90" class="rink-svg" style="--tt:${Math.round(SPD[U.mv.spd]*.9)}ms" role="img" aria-label="Схема площадки">
+  const pk=ANI.pk.path[0]||[100,45];
+  return `<svg viewBox="0 0 200 90" class="rink-svg" id="rinkS" role="img" aria-label="Схема площадки">
   <rect x="1" y="1" width="198" height="88" rx="16" fill="#f3f8fc" stroke="#8ea4b8" stroke-width="1.4"/>
   <line x1="100" y1="1" x2="100" y2="89" stroke="#e05566" stroke-width="1.3"/><line x1="75" y1="1" x2="75" y2="89" stroke="#3d6fd8" stroke-width="1.2"/><line x1="125" y1="1" x2="125" y2="89" stroke="#3d6fd8" stroke-width="1.2"/>
   <line x1="11" y1="5" x2="11" y2="85" stroke="#e05566" stroke-width=".5"/><line x1="189" y1="5" x2="189" y2="85" stroke="#e05566" stroke-width=".5"/>
   <circle cx="100" cy="45" r="9" fill="none" stroke="#3d6fd8" stroke-width=".5"/>${fc(31,22)}${fc(31,68)}${fc(169,22)}${fc(169,68)}
   <path d="M11 39a6 6 0 0 1 0 12z" fill="#cfe2f6" stroke="#e05566" stroke-width=".4"/><path d="M189 39a6 6 0 0 0 0 12z" fill="#cfe2f6" stroke="#e05566" stroke-width=".4"/>
   <rect x="7.5" y="42" width="3.5" height="6" fill="none" stroke="#5b6b7d" stroke-width=".7"/><rect x="189" y="42" width="3.5" height="6" fill="none" stroke="#5b6b7d" stroke-width=".7"/>
-  <text x="50" y="86" font-size="4.2" fill="#8ea4b8" text-anchor="middle" font-family="IBM Plex Sans,sans-serif">${tm[0].ab} обороняет</text><text x="150" y="86" font-size="4.2" fill="#8ea4b8" text-anchor="middle" font-family="IBM Plex Sans,sans-serif">${tm[1].ab} обороняет</text>
-  ${[0,1].map(k=>pos[k].map((p,i)=>dot(k,i,p)).join('')).join('')}
-  <g class="dot" id="puck" style="transform:translate(${puck[0]}px,${puck[1]}px)"><circle r="1.5" fill="#111"/></g>
+  <text x="50" y="86" font-size="4.2" fill="#8ea4b8" text-anchor="middle" font-family="IBM Plex Sans,sans-serif">${tm[0].name} обороняет</text><text x="150" y="86" font-size="4.2" fill="#8ea4b8" text-anchor="middle" font-family="IBM Plex Sans,sans-serif">${tm[1].name} обороняет</text>
+  ${[0,1].map(k=>[0,1,2,3,4,5].map(i=>dot(k,i)).join('')).join('')}
+  <g id="puck" transform="translate(${pk[0]} ${pk[1]})"><circle r="1.6" fill="#111"/></g>
   <text id="flash" x="100" y="50" text-anchor="middle" font-size="16" font-weight="800" font-family="Unbounded,Arial Black,sans-serif" fill="#e05566" class="flash">ГОЛ!</text>
   </svg>`;
 }
-function moveDots(L){
-  const {pos,puck,hid}=positions(L);
-  [0,1].forEach(k=>pos[k].forEach(([x,y],i)=>{const el=document.getElementById(`dt${k}${i}`);if(el){el.style.transform=`translate(${x}px,${y}px)`;el.style.opacity=hid[k].includes(i)?0:1;}}));
-  const pk=document.getElementById('puck');if(pk)pk.style.transform=`translate(${puck[0]}px,${puck[1]}px)`;
-  const fl=document.getElementById('flash');
-  if(fl&&L.vis.goal!=null){fl.classList.remove('on');void fl.getBBox;requestAnimationFrame(()=>fl.classList.add('on'));}
+function showGoal(L){
+  const el=document.getElementById('gpop'),g=L.lg;if(!el||!g)return;
+  const t=T(g.k?L.a:L.h),p=P(g.sid),as=g.as.map(P).filter(Boolean);if(!p)return;
+  el.innerHTML=`<div class="gp-h">${badge(t,44)}<div class="gp-t"><b>ГОЛ!</b><small>${t.name} · ${perLbl(g.per)} ${mmss(g.s)}</small></div><span class="gp-sc num">${g.sc[0]}:${g.sc[1]}</span></div>
+  <p class="gp-n"><span class="gp-num">${p.num||''}</span>${full(p)}</p>
+  <p class="small">${as.length?'Передачи: '+as.map(x=>`<b>${x.num||''}</b> ${nm(x)}`).join(', '):'Без передач'}${g.pp?' · в большинстве':g.sh?' · в меньшинстве':''}</p>`;
+  el.hidden=false;el.classList.remove('on');void el.offsetWidth;el.classList.add('on');
+  clearTimeout(gpT);gpT=setTimeout(()=>{el.hidden=true;},Math.max(1800,3200*SPD[U.mv?U.mv.spd:0]/1500));
+  const fl=document.getElementById('flash');if(fl){fl.classList.remove('on');void fl.getBBox;requestAnimationFrame(()=>fl.classList.add('on'));}
 }
 function updateLive(){
   const L=S.live;if(!L)return;
   const a=document.getElementById('sc0'),b=document.getElementById('sc1'),c=document.getElementById('mv-clock'),inf=document.getElementById('mv-info');
   if(a)a.textContent=L.sc[0];if(b)b.textContent=L.sc[1];if(c)c.textContent=clockTxt(L);
   if(inf)inf.innerHTML=liveInfo(L);
-  moveDots(L);
 }
 function feedHTML(evs,h,a){
   if(!evs.length)return '<p class="muted small">Матч только начался.</p>';
@@ -2649,7 +2785,7 @@ function matchView(){
   const ctl=L.done?'':L.pause?'':`<div class="mv-ctl"><button class="btn sm" data-a="lpp">${run?'❚❚ Пауза':'▶ Смотреть'}</button><button class="btn sm" data-a="lspd">Скорость ×${[1,2,4][U.mv.spd]}</button></div>`;
   const sk=L.done?'':`<div class="btn-row">${L.per===1&&L.tick<TPP?`<button class="btn sm" data-a="lskip" data-id="1">До конца 1-го периода</button>`:''}${L.per<=2&&L.tick<2*TPP?`<button class="btn sm" data-a="lskip" data-id="2">До конца 2-го</button>`:''}<button class="btn sm" data-a="lskip" data-id="end">До конца матча</button></div>`;
   return `<div class="mv" id="mv" role="dialog" aria-label="Матч">
-  <div class="mv-board gut"><div class="sb"><div class="sb-t">${badge(h,52)}</div><div class="sb-sc"><b id="sc0">${L.sc[0]}</b><i>:</i><b id="sc1">${L.sc[1]}</b></div><div class="sb-t r">${badge(a,52)}</div></div><div class="sb-sub" id="mv-clock">${clockTxt(L)}</div></div>
+  <div class="mv-board gut"><div class="sb"><div class="sb-t">${badge(h,52)}</div><div class="sb-sc"><b id="sc0">${L.sc[0]}</b><i>:</i><b id="sc1">${L.sc[1]}</b></div><div class="sb-t r">${badge(a,52)}</div></div><div class="sb-sub" id="mv-clock">${clockTxt(L)}</div></div><div id="gpop" class="gpop" hidden></div>
   <div class="gut mv-body"><div class="rink">${rinkSVG(L)}</div>${ctl}${sk}<div id="mv-info" class="stack">${liveInfo(L)}</div></div></div>`;
 }
 function mkBox(L){
