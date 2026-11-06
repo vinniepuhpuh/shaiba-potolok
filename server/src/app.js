@@ -1,5 +1,8 @@
 import Fastify from 'fastify';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { verifyInitData, issueToken, readToken } from './auth.js';
 import { handleUpdate } from './bot.js';
 
@@ -146,10 +149,28 @@ export function buildApp({ pool, cfg, logger = true }) {
     const ev = await q(`SELECT type, count(*)::int AS n FROM events WHERE ts > now()-interval '7 days' GROUP BY type ORDER BY n DESC`);
     const tour = await q(`SELECT (data->>'i')::int AS step, count(DISTINCT user_id)::int AS users FROM events
       WHERE type='tour' GROUP BY 1 ORDER BY 1`);
-    const daily = await q(`SELECT to_char(date_trunc('day', ts),'YYYY-MM-DD') AS day, count(DISTINCT user_id)::int AS users
-      FROM events WHERE ts > now()-interval '14 days' GROUP BY 1 ORDER BY 1`);
-    return { ...tot, ...sv, events7d: ev, tourFunnel: tour, daily };
+    const daily = await q(`WITH d AS (SELECT generate_series(date_trunc('day', now() AT TIME ZONE 'Europe/Moscow') - interval '29 days', date_trunc('day', now() AT TIME ZONE 'Europe/Moscow'), interval '1 day') AS day)
+      SELECT to_char(d.day,'YYYY-MM-DD') AS day,
+        (SELECT count(DISTINCT user_id) FROM events e WHERE (e.ts AT TIME ZONE 'Europe/Moscow') >= d.day AND (e.ts AT TIME ZONE 'Europe/Moscow') < d.day + interval '1 day')::int AS users,
+        (SELECT count(*) FROM users u WHERE (u.created_at AT TIME ZONE 'Europe/Moscow') >= d.day AND (u.created_at AT TIME ZONE 'Europe/Moscow') < d.day + interval '1 day')::int AS new
+      FROM d ORDER BY d.day`);
+    const ret = async (from, to, lo, hi) => (await pool.query(`SELECT count(*)::int AS cohort,
+        count(*) FILTER (WHERE EXISTS (SELECT 1 FROM events e WHERE e.user_id=u.id AND e.ts >= u.created_at + $3::interval AND e.ts < u.created_at + $4::interval))::int AS back
+      FROM users u WHERE u.created_at < now() - $1::interval AND u.created_at >= now() - $2::interval`, [from, to, lo, hi])).rows[0];
+    const d1 = await ret('2 days', '32 days', '20 hours', '48 hours');
+    const d7 = await ret('8 days', '38 days', '6 days', '8 days');
+    const teams = await q(`SELECT (data->>'id')::int AS id, count(DISTINCT user_id)::int AS users FROM events
+      WHERE type='team' AND data->>'id' ~ '^[0-9]+$' GROUP BY 1 ORDER BY 2 DESC LIMIT 12`);
+    const seasons = await q(`SELECT (meta->>'season')::int - 2025 AS n, count(*)::int AS users FROM saves
+      WHERE meta->>'season' ~ '^[0-9]+$' GROUP BY 1 ORDER BY 1`);
+    const [skip] = await q(`SELECT count(DISTINCT user_id)::int AS n FROM events WHERE type='tour_skip'`);
+    const [started] = await q(`SELECT count(DISTINCT user_id)::int AS n FROM events WHERE type='team'`);
+    return { ...tot, ...sv, events7d: ev, tourFunnel: tour, daily, retention: { d1, d7 }, teams, seasons, tourSkip: skip.n, teamPicked: started.n, at: new Date().toISOString() };
   });
+
+  // Страница статистики (данные она берёт из /api/admin/stats по ключу, который вводится на странице)
+  const adminHtml = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'admin', 'index.html'));
+  app.get('/admin', async (req, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store').header('X-Robots-Tag', 'noindex').send(adminHtml));
 
   // Вебхук бота: /bot/<BOT_WEBHOOK_PATH>
   if (cfg.botToken && cfg.webhookPath) {

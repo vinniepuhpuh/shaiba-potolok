@@ -104,6 +104,11 @@ test('события и сводка', async () => {
   assert.equal(s.users, 3);
   assert.equal(s.saves, 1);
   assert.ok(s.events7d.find((e) => e.type === 'tour'));
+  assert.equal(s.daily.length, 30);
+  assert.ok(s.retention && 'cohort' in s.retention.d1);
+  r = await app.inject({ method: 'GET', url: '/admin' });
+  assert.equal(r.statusCode, 200);
+  assert.match(r.body, /Генменеджер · статистика/);
 });
 
 test('CORS', async () => {

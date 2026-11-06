@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Генменеджер · статистика</title>
+<style>
+:root{color-scheme:light;
+  --page:#f9f9f7;--surface:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;--grid:#e1e0d9;--axis:#c3c2b7;--ring:rgba(11,11,11,.10);
+  --s1:#2a78d6;--s2:#eb6834;--good:#006300;--bad:#c4332f;--wash:rgba(42,120,214,.08)}
+@media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])){color-scheme:dark;
+  --page:#0d0d0d;--surface:#1a1a19;--ink:#f0efec;--ink2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;--axis:#383835;--ring:rgba(255,255,255,.10);
+  --s1:#3987e5;--s2:#d95926;--good:#0ca30c;--bad:#e66767;--wash:rgba(57,135,229,.12)}}
+:root[data-theme="dark"]{color-scheme:dark;
+  --page:#0d0d0d;--surface:#1a1a19;--ink:#f0efec;--ink2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;--axis:#383835;--ring:rgba(255,255,255,.10);
+  --s1:#3987e5;--s2:#d95926;--good:#0ca30c;--bad:#e66767;--wash:rgba(57,135,229,.12)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1080px;margin:0 auto;padding:20px 16px 48px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 16px;margin-bottom:16px}
+h1{font-size:20px;margin:0;font-weight:650}
+.sub{color:var(--ink2);font-size:13px}
+button{font:inherit;font-size:13px;padding:7px 12px;border-radius:9px;border:1px solid var(--ring);background:var(--surface);color:var(--ink);cursor:pointer}
+button:hover{background:var(--wash)}
+.card{background:var(--surface);border:1px solid var(--ring);border-radius:14px;padding:16px}
+.grid{display:grid;gap:12px}
+.tiles{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:12px}
+.tile small{display:block;color:var(--ink2);font-size:13px}
+.tile b{display:block;font-size:28px;font-weight:650;margin-top:2px}
+.tile .d{font-size:12px;color:var(--muted)}
+.hero b{font-size:48px;line-height:1.05}
+.two{grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));margin-top:12px}
+h2{font-size:15px;margin:0 0 2px;font-weight:650}
+.card>.sub{margin-bottom:10px}
+.legend{display:flex;gap:14px;font-size:13px;color:var(--ink2);margin:4px 0 6px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+svg{display:block;width:100%;height:auto;overflow:visible}
+svg text{fill:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
+svg .lbl{fill:var(--ink2);font-size:12px}
+.hbars{display:grid;gap:6px}
+.hb{display:grid;grid-template-columns:minmax(110px,42%) 1fr auto;gap:10px;align-items:center;font-size:13px}
+.hb span:first-child{color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hb .tr{height:12px;border-radius:0 4px 4px 0;background:var(--grid);position:relative}
+.hb .fl{position:absolute;inset:0 auto 0 0;background:var(--s1);border-radius:0 4px 4px 0;min-width:2px}
+.hb b{font-weight:600;font-variant-numeric:tabular-nums;min-width:64px;text-align:right}
+.tip{position:fixed;pointer-events:none;background:var(--surface);border:1px solid var(--ring);border-radius:10px;padding:8px 10px;font-size:12.5px;box-shadow:0 4px 16px rgba(0,0,0,.12);display:none;z-index:5;min-width:120px}
+.tip b{display:block;margin-bottom:2px}
+.tip i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:6px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td,th{padding:6px 4px;border-bottom:1px solid var(--grid);text-align:left}
+td:last-child,th:last-child{text-align:right;font-variant-numeric:tabular-nums}
+th{color:var(--ink2);font-weight:500}
+details{margin-top:8px;font-size:13px;color:var(--ink2)}
+.login{max-width:420px;margin:12vh auto}
+.login input{width:100%;font:inherit;padding:10px 12px;border-radius:10px;border:1px solid var(--ring);background:var(--page);color:var(--ink);margin:10px 0}
+.err{color:var(--bad);font-size:13px}
+.empty{color:var(--muted);font-size:13px;padding:12px 0}
+</style>
+</head>
+<body>
+<main id="app"></main>
+<div class="tip" id="tip"></div>
+<script>
+const TEAMS=["Санкт-Петербург Туманы","Калининград Маяки","Мурманск Полярники","Череповец Литейщики","Ярославль Медведи","Подольск Титаны","Минск Зубры","Гродно Рыцари","Москва Гвардейцы","Москва Гладиаторы","Воронеж Истребители","Нижний Новгород Бурлаки","Казань Ханы","Нижнекамск Нефтяники","Тольятти Моторы","Сочи Волны","Пермь Мамонты","Уфа Пчёлы","Челябинск Метеориты","Магнитогорск Сталевары","Екатеринбург Машиностроители","Тюмень Сибирские Волки","Астана Беркуты","Алматы Кочевники","Омск Призраки","Новосибирск Морозы","Красноярск Горняки","Новокузнецк Кузнецы","Хабаровск Харза","Владивосток Чайки","Пекин Панды","Харбин Росомахи"];
+const STEPS=["Потолок зарплат","Матчи","Тактика","Владелец и цель","Спонсоры","Состав и позиции","Рынок","Как подписать игрока","Первый ход (конец)"];
+const EVN={open:'Открыли игру',first:'Первый вход',team:'Выбрали клуб',tour:'Шаги обучения',tour_skip:'Пропустили обучение',season:'Закончили сезон',fired:'Уволены',live:'Смотрели матч',error:'Ошибки'};
+const K='gm-admin-key';
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt=n=>Number(n||0).toLocaleString('ru-RU');
+const pct=(a,b)=>b?Math.round(a/b*100)+'%':'—';
+let key=null;try{key=localStorage.getItem(K);}catch(e){}
+
+function login(msg){
+  $('#app').innerHTML=`<div class="card login"><h1>Статистика Генменеджера</h1>
+  <p class="sub">Введите ключ ADMIN_KEY из файла /opt/genmanager/server/.env. Он сохранится только в этом браузере.</p>
+  <input id="k" type="password" autocomplete="off" placeholder="Ключ статистики">
+  ${msg?`<p class="err">${esc(msg)}</p>`:''}<button id="go">Войти</button></div>`;
+  const go=()=>{key=$('#k').value.trim();try{localStorage.setItem(K,key);}catch(e){}load();};
+  $('#go').onclick=go;$('#k').onkeydown=e=>{if(e.key==='Enter')go();};$('#k').focus();
+}
+async function load(){
+  if(!key)return login();
+  let r;
+  try{r=await fetch('/api/admin/stats',{headers:{Authorization:'Bearer '+key},cache:'no-store'});}catch(e){return login('Нет связи с сервером.');}
+  if(r.status===401){try{localStorage.removeItem(K);}catch(e){}return login('Неверный ключ.');}
+  if(!r.ok)return login('Сервер ответил ошибкой '+r.status+'.');
+  render(await r.json());
+}
+
+/* ---------- line chart with crosshair ---------- */
+function lineChart(el,days,series){
+  const W=Math.max(300,Math.round(el.clientWidth||640)),H=W<500?200:240,L=34,R=40,T=10,B=26,iw=W-L-R,ih=H-T-B,n=days.length;
+  const max=Math.max(4,...series.flatMap(s=>s.v));
+  const raw=max/4,mag=Math.pow(10,Math.floor(Math.log10(raw))),step=[1,2,5,10].map(k=>k*mag).find(v=>v>=raw),top=step*4;
+  const x=i=>L+(n<2?iw/2:i*iw/(n-1)),y=v=>T+ih-v/top*ih;
+  let g='';
+  for(let k=0;k<=4;k++){const v=top*k/4,yy=y(v);g+=`<line x1="${L}" x2="${W-R}" y1="${yy}" y2="${yy}" stroke="${k?'var(--grid)':'var(--axis)'}" stroke-width="1"/><text x="${L-6}" y="${yy+4}" text-anchor="end">${fmt(v)}</text>`;}
+  const lab=i=>{const [,m,d]=days[i].split('-');return `${+d}.${m}`;};
+  for(let i=0;i<n;i+=Math.max(1,Math.round(n/(W<500?4:6))))g+=`<text x="${x(i)}" y="${H-6}" text-anchor="middle">${lab(i)}</text>`;
+  series.forEach(s=>{
+    const p=s.v.map((v,i)=>`${i?'L':'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join('');
+    g+=`<path d="${p}" fill="none" stroke="${s.c}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    const last=s.v[n-1];g+=`<circle cx="${x(n-1)}" cy="${y(last)}" r="4" fill="${s.c}" stroke="var(--surface)" stroke-width="2"/><text class="lbl" x="${x(n-1)+8}" y="${y(last)+4}">${fmt(last)}</text>`;
+  });
+  g+=`<line id="xh" x1="0" x2="0" y1="${T}" y2="${T+ih}" stroke="var(--axis)" stroke-width="1" visibility="hidden"/>`;
+  series.forEach((s,k)=>g+=`<circle id="hd${k}" r="4.5" fill="${s.c}" stroke="var(--surface)" stroke-width="2" visibility="hidden"/>`);
+  g+=`<rect x="${L}" y="${T}" width="${iw}" height="${ih}" fill="transparent" id="hit"/>`;
+  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Игроки по дням">${g}</svg>`;
+  const svg=el.querySelector('svg'),hit=svg.querySelector('#hit'),xh=svg.querySelector('#xh'),tip=$('#tip');
+  const move=e=>{
+    const pt=svg.createSVGPoint();const ev=e.touches?e.touches[0]:e;pt.x=ev.clientX;pt.y=ev.clientY;
+    const p=pt.matrixTransform(svg.getScreenCTM().inverse());const i=Math.max(0,Math.min(n-1,Math.round((p.x-L)/iw*(n-1))));
+    xh.setAttribute('x1',x(i));xh.setAttribute('x2',x(i));xh.setAttribute('visibility','visible');
+    series.forEach((s,k)=>{const d=svg.querySelector('#hd'+k);d.setAttribute('cx',x(i));d.setAttribute('cy',y(s.v[i]));d.setAttribute('visibility','visible');});
+    const [yy,m,dd]=days[i].split('-');
+    tip.innerHTML=`<b>${+dd}.${m}.${yy}</b>`+series.map(s=>`<div><i style="background:${s.c}"></i>${s.n}: <b style="display:inline">${fmt(s.v[i])}</b></div>`).join('');
+    tip.style.display='block';const tx=Math.min(window.innerWidth-tip.offsetWidth-8,ev.clientX+14);tip.style.left=tx+'px';tip.style.top=(ev.clientY-tip.offsetHeight-12)+'px';
+  };
+  const out=()=>{xh.setAttribute('visibility','hidden');series.forEach((s,k)=>svg.querySelector('#hd'+k).setAttribute('visibility','hidden'));tip.style.display='none';};
+  hit.addEventListener('mousemove',move);hit.addEventListener('touchmove',move,{passive:true});hit.addEventListener('touchstart',move,{passive:true});
+  hit.addEventListener('mouseleave',out);hit.addEventListener('touchend',()=>setTimeout(out,1500));
+}
+function hbars(rows,base){
+  if(!rows.length)return '<p class="empty">Пока нет данных.</p>';
+  const max=Math.max(...rows.map(r=>r.v),1);
+  return `<div class="hbars">${rows.map(r=>`<div class="hb" title="${esc(r.n)}: ${fmt(r.v)}"><span>${esc(r.n)}</span><div class="tr"><div class="fl" style="width:${r.v/max*100}%"></div></div><b>${fmt(r.v)}${base?` <span class="sub">· ${pct(r.v,base)}</span>`:''}</b></div>`).join('')}</div>`;
+}
+function tile(label,value,note,cls){return `<div class="card tile ${cls||''}"><small>${label}</small><b>${value}</b>${note?`<span class="d">${note}</span>`:''}</div>`;}
+
+function render(s){
+  const r1=s.retention&&s.retention.d1||{cohort:0,back:0},r7=s.retention&&s.retention.d7||{cohort:0,back:0};
+  const days=(s.daily||[]).map(d=>d.day),dau=(s.daily||[]).map(d=>d.users),nw=(s.daily||[]).map(d=>d.new);
+  const base=s.teamPicked||0,step={};(s.tourFunnel||[]).forEach(t=>step[t.step]=t.users);
+  const funnel=[{n:'Выбрали клуб',v:base},...STEPS.map((n,i)=>({n:`${i+1}. ${n}`,v:step[i+1]||0}))];
+  const teams=(s.teams||[]).map(t=>({n:TEAMS[t.id]||('Клуб '+t.id),v:t.users}));
+  const seasons=(s.seasons||[]).filter(x=>x.n>=1).map(x=>({n:`Сезон ${x.n}`,v:x.users}));
+  const ev=(s.events7d||[]);
+  const at=new Date(s.at||Date.now());
+  $('#app').innerHTML=`<header><div><h1>Генменеджер · статистика</h1><span class="sub">Обновлено ${at.toLocaleString('ru-RU',{day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'})}</span></div>
+    <div><button id="rf">Обновить</button> <button id="lo">Выйти</button></div></header>
+  <div class="grid tiles">
+    ${tile('Всего игроков',fmt(s.users),`новых за сутки: ${fmt(s.new_day)}`,'hero')}
+    ${tile('Играли сегодня',fmt(s.dau),'за последние 24 часа')}
+    ${tile('За 7 дней',fmt(s.wau),'хотя бы один заход')}
+    ${tile('Вернулись на 2-й день',pct(r1.back,r1.cohort),r1.cohort?`из ${fmt(r1.cohort)} новых`:'мало данных')}
+    ${tile('Вернулись через неделю',pct(r7.back,r7.cohort),r7.cohort?`из ${fmt(r7.cohort)} новых`:'мало данных')}
+    ${tile('Сохранений в облаке',fmt(s.saves),`в среднем ${fmt(s.avg_kb)} КБ`)}
+  </div>
+  <div class="card"><h2>Игроки по дням</h2><div class="sub">Последние 30 дней, по московскому времени</div>
+    <div class="legend"><span><i style="background:var(--s1)"></i>Играли</span><span><i style="background:var(--s2)"></i>Новые</span></div>
+    <div id="ln"></div>
+    <details><summary>Таблица</summary><table><tr><th>День</th><th>Играли</th><th>Новые</th></tr>${days.slice().reverse().map((d,i)=>`<tr><td>${d}</td><td>${dau[days.length-1-i]}</td><td>${nw[days.length-1-i]}</td></tr>`).join('')}</table></details>
+  </div>
+  <div class="grid two">
+    <div class="card"><h2>Обучение</h2><div class="sub">Сколько игроков дошли до каждого шага. Пропустили обучение: ${fmt(s.tourSkip)}</div>${hbars(funnel,base)}</div>
+    <div class="card"><h2>Популярные клубы</h2><div class="sub">Сколько игроков выбрали клуб</div>${hbars(teams)}</div>
+    <div class="card"><h2>Где сейчас игроки</h2><div class="sub">Текущий сезон в облачных сохранениях</div>${hbars(seasons)}</div>
+    <div class="card"><h2>События за 7 дней</h2><div class="sub">Сколько раз произошло</div>
+      ${ev.length?`<table><tr><th>Событие</th><th>Раз</th></tr>${ev.map(e=>`<tr><td>${esc(EVN[e.type]||e.type)}</td><td>${fmt(e.n)}</td></tr>`).join('')}</table>`:'<p class="empty">Пока нет данных.</p>'}</div>
+  </div>`;
+  const draw=()=>lineChart($('#ln'),days,[{n:'Играли',v:dau,c:'var(--s1)'},{n:'Новые',v:nw,c:'var(--s2)'}]);
+  draw();window.onresize=()=>{clearTimeout(window._rt);window._rt=setTimeout(draw,150);};
+  $('#rf').onclick=load;$('#lo').onclick=()=>{try{localStorage.removeItem(K);}catch(e){}key=null;login();};
+}
+load();
+</script>
+</body>
+</html>
