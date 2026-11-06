@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script>window.GM_API="";</script>
 <title>Генменеджер</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1500,7 +1501,7 @@ function ownerEval(){
   F.ten++;
   F.last={...F.ps,net,d,gd,fd,sp,ok,grace,ultNow,ultLift,champ,goal:g.txt};
   S.hist.unshift({s:seasonLbl(),place,po:up?(champ?'Чемпион':ROUNDS[up.r]):'Мимо плей-офф',net});
-  if(fired){S.fired=true;news(`Ультиматум не выполнен. Владелец расстался с вами (${F.owner}/100).`);}
+  if(fired){S.fired=true;track('fired',{s:S.season});news(`Ультиматум не выполнен. Владелец расстался с вами (${F.owner}/100).`);}
   else if(ultNow)news(`Ультиматум владельца: в следующем сезоне цель обязательна, иначе увольнение.`);
   else if(ultLift)news('Владелец снял ультиматум: цель сезона выполнена.');
 }
@@ -1638,6 +1639,7 @@ function osSign(id){
 /* ---------- offseason ---------- */
 function startOffseason(){
   S.offers=[];inv();
+  {const t=T(S.user),cf=S.teams.filter(x=>x.conf===t.conf).sort(cmpStand);track('season',{s:S.season,place:cf.findIndex(x=>x.id===t.id)+1,pts:pts(t)});}
   sponSeasonEnd();
   ownerEval();
   gmReview();
@@ -1883,7 +1885,7 @@ function buyUpg(k){
 }
 
 /* ---------- persistence ---------- */
-function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}if(typeof cloudMark==='function')cloudMark();}
 function load(){try{const s=localStorage.getItem(KEY);if(s){const o=JSON.parse(s);if(o&&o.v===6)return o;}}catch(e){}return null;}
 
 
@@ -1983,7 +1985,7 @@ function tourStart(){U.tour={i:0};U.sheet=null;}
 function tourGo(i){
   if(i<0)return;
   if(i>=TOUR.length){U.tour=null;S.tutDone=true;U.tab='club';return;}
-  U.tour.i=i;U.tour.scrolled=false;const s=TOUR[i];
+  U.tour.i=i;U.tour.scrolled=false;const s=TOUR[i];track('tour',{i});
   if(s.tab){U.tab=s.tab;if(s.tab==='roster')U.rs='players';if(s.mk)U.mk=s.mk;}
 }
 function tourHTML(){
@@ -2636,7 +2638,7 @@ function sheetHelp(){
   return `<div class="stack"><h3>Как играть</h3><p class="sub">Главные понятия игры коротко.</p><div class="gloss">${GLOSS.map(([a,b])=>`<div><b>${a}</b><p class="small">${b}</p></div>`).join('')}</div><button class="btn pri" data-a="tourAgain">Пройти обучение заново</button><button class="btn" data-a="close">Закрыть</button></div>`;
 }
 function sheetMenu(){
-  return `<div class="stack"><h3>Меню</h3><p class="sub">Игра сохраняется автоматически на этом устройстве.</p>
+  return `<div class="stack"><h3>Меню</h3>${cloudStatusHTML()}
   <div class="seg"><button data-a="sndOn" aria-pressed="${SND.on}">Звуки ${SND.on?'вкл':'выкл'}</button><button data-a="ambOn" aria-pressed="${SND.amb&&SND.on}" ${SND.on?'':'disabled'}>Музыка в матче ${SND.amb?'вкл':'выкл'}</button></div>
   <button class="btn" data-a="wn">Что нового</button>
   <button class="btn" data-a="help">Как играть</button><button class="btn" data-a="tourAgain">Пройти обучение заново</button><button class="btn" data-a="hintsReset">Показать подсказки снова</button>
@@ -2664,6 +2666,7 @@ function render(){
     else if(s.type==='menu')inner=sheetMenu();
     else if(s.type==='help')inner=sheetHelp();
     else if(s.type==='wn')inner=sheetWhatsNew();
+    else if(s.type==='cloud')inner=sheetCloud();
     else if(s.type==='team')inner=sheetTeam(T(s.id));
     else if(s.type==='digest')inner=sheetDigest(s.from);
     else if(s.type==='box')inner=S.box[s.i]?`<div class="stack">${boxView(S.box[s.i],false)}</div>`:'';
@@ -2693,7 +2696,7 @@ function act(a,id){
   const seq0=S.nseq||0;
   const n=Number(id),F=S.fin;
   switch(a){
-    case 'watch':{if(S.live)break;const g=userGameToday();if(!g)break;S.live=newLive(g.h,g.a,g.kind);prep(S.live);aniReset();U.mv={seg:'feed',spd:U.mv?U.mv.spd:0,lines:false};U.startT=true;ambStart();break;}
+    case 'watch':{if(S.live)break;track('live');const g=userGameToday();if(!g)break;S.live=newLive(g.h,g.a,g.kind);prep(S.live);aniReset();U.mv={seg:'feed',spd:U.mv?U.mv.spd:0,lines:false};U.startT=true;ambStart();break;}
     case 'lpp':if(_timer)stopTimer();else U.startT=true;break;
     case 'lspd':U.mv.spd=(U.mv.spd+1)%3;if(_timer)U.startT=true;break;
     case 'lskip':{stopTimer();runLive(S.live,id==='1'?TPP:id==='2'?2*TPP:null);U.mv.lines=false;if(ANI){ANI.foNext=true;planPhase(S.live,true);}break;}
@@ -2704,10 +2707,14 @@ function act(a,id){
     case 'box':U.sheet={type:'box',i:n};break;
     case 'veil':case 'close':U.sheet=null;U.confirm=null;U.slot=null;U.back=null;break;
     case 'preview':U.sheet={type:'preview',id:n};break;
-    case 'take':U.sheet=null;takeTeam(n);if(!S.tutDone)tourStart();break;
+    case 'take':U.sheet=null;takeTeam(n);track('team',{id:n});if(!S.tutDone)tourStart();break;
     case 'tourNext':tourGo(U.tour.i+1);window.scrollTo(0,0);break;
     case 'tourPrev':tourGo(U.tour.i-1);window.scrollTo(0,0);break;
-    case 'tourSkip':U.tour=null;S.tutDone=true;break;
+    case 'tourSkip':track('tour_skip',{i:U.tour?U.tour.i:0});U.tour=null;S.tutDone=true;break;
+    case 'cloudSheet':U.sheet={type:'cloud'};break;
+    case 'cloudTake':{U.sheet=null;stopTimer();const app=document.getElementById('app');if(app)app.innerHTML='<p class="muted" style="padding:48px 16px;text-align:center">Загружаю сохранение…</p>';
+      cloudPull().then(ok=>{if(ok)trackFlush().finally(()=>location.reload());else{toast('Не удалось загрузить: в облаке нет сохранения.');render();}}).catch(()=>{toast('Нет связи с сервером. Попробуйте позже.');render();});return;}
+    case 'cloudKeep':CL.conflict=null;U.sheet=null;cloudPush(true);toast('Записываю это сохранение в облако.');break;
     case 'tourAgain':U.sheet=null;tourStart();window.scrollTo(0,0);break;
     case 'help':U.sheet={type:'help'};break;
     case 'wn':U.sheet={type:'wn'};verMark();break;
@@ -2818,6 +2825,97 @@ function tgSync(){
   try{const show=!!U.sheet||(S.user!=null&&!S.live&&U.tab!=='club');show?TG.BackButton.show():TG.BackButton.hide();}catch(e){}
 }
 const tgHaptic=k=>{try{TG&&TG.HapticFeedback&&(k==='goal'?TG.HapticFeedback.notificationOccurred('success'):TG.HapticFeedback.impactOccurred('light'));}catch(e){}};
+/* ---------- cloud saves & stats (server) ---------- */
+const API=(typeof window!=='undefined'&&window.GM_API)||'';
+const CK='gm-cloud';
+const CL={on:false,token:null,ver:0,dirty:false,gen:0,st:'off',at:null,busy:false,t:null,q:[],conflict:null,tries:0};
+const cloudable=()=>!!(TG&&TG.initData&&API);
+function clMeta(){try{return JSON.parse(localStorage.getItem(CK)||'{}')||{};}catch(e){return {};}}
+function clMetaSave(){try{localStorage.setItem(CK,JSON.stringify({ver:CL.ver,dirty:CL.dirty,at:CL.at}));}catch(e){}}
+async function apiF(path,opt,ms){
+  opt=opt||{};const c=new AbortController(),t=setTimeout(()=>c.abort(),ms||8000);
+  try{return await fetch(API+path,{...opt,signal:c.signal,headers:{...(opt.headers||{}),...(CL.token?{Authorization:'Bearer '+CL.token}:{})}});}
+  finally{clearTimeout(t);}
+}
+async function gzip(str){
+  if(typeof CompressionStream==='undefined')return null;
+  try{return new Uint8Array(await new Response(new Blob([str]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());}catch(e){return null;}
+}
+const gunzip=async buf=>new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+const b64j=o=>btoa(unescape(encodeURIComponent(JSON.stringify(o))));
+const saveMeta=st=>{if(!st||st.user==null)return {};const t=st.teams[st.user];return {season:st.season,day:st.day,phase:st.phase,team:t?`${t.city} ${t.name}`:''};};
+const metaTxt=m=>m&&m.team?`${m.team}, сезон ${m.season}/${String((m.season||0)+1).slice(2)}${m.phase==='regular'?`, день ${m.day}`:m.phase==='playoffs'?', плей-офф':', межсезонье'}`:'пустое сохранение';
+const hhmm=iso=>{try{const d=new Date(iso);return d.toLocaleDateString('ru-RU',{day:'numeric',month:'short'})+' '+d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});}catch(e){return '';}};
+async function cloudAuth(){
+  const r=await apiF('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({initData:TG.initData})},6000);
+  if(!r.ok)throw new Error('auth '+r.status);
+  const a=await r.json();CL.token=a.token;CL.on=true;CL.st='ok';return a;
+}
+async function cloudPull(){
+  const r=await apiF('/api/save',{},15000);
+  if(r.status===204)return false;if(!r.ok)throw new Error('pull '+r.status);
+  const enc=r.headers.get('X-Enc'),ver=Number(r.headers.get('X-Ver')),buf=new Uint8Array(await r.arrayBuffer());
+  const txt=enc==='json'?new TextDecoder().decode(buf):await gunzip(buf);
+  const o=JSON.parse(txt);if(!o||o.v!==6)return false;
+  localStorage.setItem(KEY,txt);CL.ver=ver;CL.dirty=false;CL.at=r.headers.get('X-Updated');CL.conflict=null;clMetaSave();return true;
+}
+/* before boot: sign in and pick the freshest save */
+async function cloudPre(){
+  if(!cloudable())return;
+  const m=clMeta();CL.ver=m.ver||0;CL.dirty=!!m.dirty;CL.at=m.at||null;
+  try{
+    const a=await cloudAuth(),sv=a.save,local=localStorage.getItem(KEY);
+    if(sv&&!local)await cloudPull();
+    else if(sv&&sv.ver>CL.ver){if(CL.dirty)CL.conflict={ver:sv.ver,meta:sv.meta,at:sv.updatedAt};else await cloudPull();}
+    else if(sv&&sv.ver<CL.ver){CL.ver=sv.ver;CL.dirty=true;}
+    else if(!sv&&local){CL.ver=0;CL.dirty=true;}
+    if(a.user&&a.user.created)track('first');
+  }catch(e){CL.st='offline';}
+}
+function cloudMark(){
+  if(!cloudable())return;
+  CL.dirty=true;CL.gen++;clMetaSave();
+  clearTimeout(CL.t);CL.t=setTimeout(()=>cloudPush(false),4000);
+}
+async function cloudPush(force){
+  if(!cloudable()||CL.busy||S.user==null)return;
+  if(CL.conflict&&!force)return;
+  if(!CL.dirty&&!force)return;
+  CL.busy=true;const g0=CL.gen,prev=CL.st;CL.st='sync';
+  try{
+    if(!CL.token)await cloudAuth();
+    const txt=JSON.stringify(S),z=await gzip(txt);
+    const r=await apiF('/api/save?base='+CL.ver+(force?'&force=1':''),{method:'PUT',headers:{'Content-Type':'application/octet-stream','X-Enc':z?'gzip':'json','X-Meta':b64j(saveMeta(S))},body:z||new TextEncoder().encode(txt)},20000);
+    if(r.status===401){CL.token=null;throw new Error('expired');}
+    if(r.status===409){const j=await r.json();CL.conflict={ver:j.ver,meta:j.meta,at:j.updatedAt};CL.st='conflict';if(!U.sheet)U.sheet={type:'cloud'};render();return;}
+    if(!r.ok)throw new Error('push '+r.status);
+    const j=await r.json();CL.ver=j.ver;CL.dirty=CL.gen!==g0;CL.at=new Date().toISOString();CL.st='ok';CL.conflict=null;CL.tries=0;clMetaSave();
+  }catch(e){CL.st='offline';CL.tries++;clearTimeout(CL.t);CL.t=setTimeout(()=>cloudPush(false),Math.min(120000,5000*Math.pow(2,CL.tries)));}
+  finally{CL.busy=false;if(U.sheet&&U.sheet.type==='menu'&&prev!==CL.st)render();}
+}
+/* stats: small batches */
+function track(t,d){if(!cloudable())return;CL.q.push({t,d:d||{}});if(CL.q.length>=20)trackFlush();}
+async function trackFlush(){
+  if(!CL.q.length||!CL.token)return;const ev=CL.q.splice(0,50);
+  try{const r=await apiF('/api/events',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({events:ev})},8000);if(!r.ok&&r.status!==400)throw 0;}
+  catch(e){if(CL.q.length<200)CL.q.unshift(...ev);}
+}
+if(typeof setInterval!=='undefined'&&typeof window!=='undefined')setInterval(()=>{if(CL.token)trackFlush();},30000);
+if(typeof document!=='undefined'&&document.addEventListener)document.addEventListener('visibilitychange',()=>{if(document.hidden&&cloudable()){cloudPush(false);trackFlush();}});
+if(typeof window!=='undefined'&&window.addEventListener)window.addEventListener('pagehide',()=>{if(cloudable()){cloudPush(false);trackFlush();}});
+function cloudStatusHTML(){
+  if(!cloudable())return '<p class="sub">Игра сохраняется автоматически на этом устройстве.</p>';
+  if(CL.conflict)return `<p class="sub warn">Сохранения на этом устройстве и в облаке разошлись.</p><button class="btn pri" data-a="cloudSheet">Выбрать сохранение</button>`;
+  const t={ok:`Сохранено в облаке${CL.at?` · ${hhmm(CL.at)}`:''}. Можно продолжить с другого устройства в Telegram.`,sync:'Сохраняю в облако…',offline:'Нет связи с сервером. Прогресс сохраняется на устройстве и уйдёт в облако, когда связь появится.',off:'Подключаюсь к облаку…'}[CL.st]||'';
+  return `<p class="sub">${CL.st==='ok'&&!CL.dirty?'☁️ ':''}${t}</p>`;
+}
+function sheetCloud(){
+  const c=CL.conflict;if(!c)return '<div class="stack"><h3>Облако</h3><p class="sub">Всё в порядке.</p><button class="btn" data-a="close">Закрыть</button></div>';
+  return `<div class="stack"><h3>Какое сохранение оставить?</h3>
+  <p class="sub">Вы играли на другом устройстве, и сохранения разошлись. Выберите одно: второе будет заменено.</p>
+  <section class="card"><h2>В облаке<span>${hhmm(c.at)}</span></h2><p class="small">${metaTxt(c.meta)}</p><button class="btn pri" data-a="cloudTake">Загрузить из облака</button></section>
+  <section class="card"><h2>На этом устройстве</h2><p class="small">${metaTxt(saveMeta(S))}</p><button class="btn" data-a="cloudKeep">Оставить это и записать в облако</button></section></div>`;
+}
 function boot(data){
   tgInit();
   S=(data&&data.S)||load();
@@ -2836,8 +2934,11 @@ function boot(data){
   window.addEventListener('resize',()=>tourPlace());window.addEventListener('scroll',()=>{if(U.tour)tourPlace();},{passive:true});
   if(S.live)U.mv={seg:'feed',spd:0,lines:false};
   if(S.user!=null&&!S.live&&verSeen()!==VER){U.sheet={type:'wn'};}
+  if(CL.conflict)U.sheet={type:'cloud'};
   verMark();
   render();
+  track('open',{v:VER,s:S.season});
+  if(CL.dirty&&!CL.conflict)setTimeout(()=>cloudPush(false),1500);
 }
 
 /* ---------- match viewer ---------- */
@@ -3144,7 +3245,9 @@ function viewLeague(){
     return `<div class="ser"><span class="${ca}">${s.sa}. ${T(s.a).city} ${T(s.a).name}</span><span class="sc">${s.wa}</span><span class="${cb}">${s.sb}. ${T(s.b).city} ${T(s.b).name}</span><span class="sc">${s.wb}</span></div>`;}).join('')}</div></section>`).reverse().join('');
 }
 if(typeof document!=='undefined'&&document.getElementById){
-  window.claude?.hot?.ready?window.claude.hot.ready(boot):boot(window.claude?.hot?.data??{});
+  if(window.claude?.hot?.ready)window.claude.hot.ready(boot);
+  else if(cloudable()){const app=document.getElementById('app');if(app)app.innerHTML='<p class="muted" style="padding:48px 16px;text-align:center">Загрузка…</p>';cloudPre().catch(()=>{}).finally(()=>boot({}));}
+  else boot(window.claude?.hot?.data??{});
 }
 </script>
 </body>

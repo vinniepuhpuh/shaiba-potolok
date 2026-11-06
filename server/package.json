@@ -1,0 +1,17 @@
+{
+  "name": "genmanager-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Сервер «Генменеджера»: вход через Telegram, облачные сохранения, статистика, бот",
+  "type": "module",
+  "main": "src/index.js",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "fastify": "5.12.8",
+    "pg": "8.23.1"
+  }
+}

@@ -1,0 +1,70 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gm
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: gm
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gm -d gm"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://gm:${DB_PASSWORD}@db:5432/gm
+      PUBLIC_URL: https://${DOMAIN}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
+  # Ежедневная копия базы в ./backups, хранятся 14 последних
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      PGPASSWORD: ${DB_PASSWORD}
+    volumes:
+      - ./backups:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          sleep 60
+          f=/backups/gm-$$(date +%Y-%m-%d).sql.gz
+          if [ ! -f "$$f" ]; then
+            pg_dump -h db -U gm gm | gzip > "$$f.tmp" && mv "$$f.tmp" "$$f" && echo "backup $$f"
+            ls -1t /backups/gm-*.sql.gz | tail -n +15 | xargs -r rm -f
+          fi
+          sleep 3540
+        done
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  dbdata:
+  caddy_data:
+  caddy_config:
