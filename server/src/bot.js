@@ -1,10 +1,14 @@
 /** Ответы бота. Сейчас: /start с кнопкой «Играть». Позже здесь будут платежи за звёзды. */
+// Из российских дата-центров api.telegram.org часто недоступен, поэтому по умолчанию
+// вызовы идут через ретранслятор на Vercel (api/tg.js в репозитории). TG_RELAY=direct — напрямую.
 export async function tg(cfg, method, payload) {
-  const r = await fetch(`https://api.telegram.org/bot${cfg.botToken}/${method}`, {
+  const direct = !cfg.tgRelay || cfg.tgRelay === 'direct';
+  const url = direct ? `https://api.telegram.org/bot${cfg.botToken}/${method}` : `${cfg.tgRelay}?m=${encodeURIComponent(method)}`;
+  const r = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(direct ? {} : { 'X-Bot-Token': cfg.botToken }) },
     body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(10000),
+    signal: AbortSignal.timeout(20000),
   });
   const j = await r.json().catch(() => ({}));
   if (!j.ok) throw new Error(`${method}: ${j.description || r.status}`);
