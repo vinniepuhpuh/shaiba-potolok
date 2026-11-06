@@ -14,7 +14,9 @@ say() { printf '\n\033[1;36m== %s\033[0m\n' "$*"; }
 say "Устанавливаю Docker, git и файрвол"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq docker.io docker-compose-v2 git ufw openssl curl >/dev/null
+apt-get install -y -qq git ufw openssl curl >/dev/null
+# Docker: если уже стоит (например, выбран при создании сервера) — не трогаем
+if ! docker compose version >/dev/null 2>&1; then apt-get install -y -qq docker.io docker-compose-v2 >/dev/null; fi
 mkdir -p /etc/docker
 # Зеркало Docker Hub на случай, если прямой доступ медленный или закрыт
 [ -f /etc/docker/daemon.json ] || echo '{"registry-mirrors":["https://mirror.gcr.io"]}' > /etc/docker/daemon.json
