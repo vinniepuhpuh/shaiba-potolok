@@ -33,7 +33,8 @@ DOMAIN=${1:-}
 
 if [ ! -f .env ]; then
   say "Настройка"
-  read -rsp "Вставьте токен бота от @BotFather и нажмите Enter: " BOT_TOKEN; echo
+  if [ -z "${BOT_TOKEN:-}" ]; then read -rp "Вставьте токен бота от @BotFather и нажмите Enter: " BOT_TOKEN; fi
+  BOT_TOKEN=$(echo "$BOT_TOKEN" | tr -d '[:space:]')
   [[ "$BOT_TOKEN" =~ ^[0-9]+:[A-Za-z0-9_-]{30,}$ ]] || { echo "Это не похоже на токен бота"; exit 1; }
   rnd() { openssl rand -hex "$1"; }
   cat > .env <<EOF
