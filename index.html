@@ -296,7 +296,7 @@ input[type=range]{width:100%;accent-color:var(--red);margin:4px 0}
 .bx-head small{color:var(--muted);font-size:12.5px}
 table.bx td,table.bx th{padding:5px 6px}
 table.bx th:first-child,table.bx td:first-child{width:auto;color:var(--ink)}
-table.bx.pl td.tm{font-size:13px}
+table.bx.plt td.tm{font-size:13px}
 table.lt th:first-child,table.lt td:first-child{width:28px}
 .md{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;font:700 11px var(--fm);color:#fff}
 .md.m1{background:var(--gold)}.md.m2{background:var(--silver)}.md.m3{background:var(--bronze)}
@@ -338,7 +338,7 @@ td.ok{color:var(--good)}td.bad{color:var(--red)}
 table.bx{table-layout:auto}
 table.bx th,table.bx td{text-align:center;padding:6px 5px}
 table.bx th:first-child,table.bx td:first-child{text-align:left;width:auto;color:var(--ink)}
-table.bx.pl th:first-child{width:46%}
+table.bx.plt th:first-child{width:46%}
 .bx-head .lg,.cmp-h .lg{display:block}
 .cmp-h{align-items:center;gap:8px}
 .cmp-h span{text-align:center}
@@ -3216,7 +3216,7 @@ function boxView(b,live){
   const shots=[0,1].map(k=>sum(b.psh,x=>x[k])),svp=k=>{const g=b.gk[k];return g.sa?((g.sa-g.ga)/g.sa).toFixed(3).replace(/^0/,''):'—';};
   const zt=b.zt[0]+b.zt[1]||1;
   const cmp=(lbl,hv,av,hn,an)=>{const t=(hn+an)||1;return `<div class="cmp"><b>${hv}</b><span>${lbl}</span><b>${av}</b><div class="cmpbar"><i style="width:${hn/t*100}%"></i><i style="width:${an/t*100}%"></i></div></div>`;};
-  const plT=(k,t)=>`<div class="tbl-wrap"><table class="bx pl"><thead><tr><th>${tl(t,24)}</th><th>Г</th><th>П</th><th>Бр</th><th>±</th><th>Шт</th><th>Вр</th></tr></thead><tbody>${b.pl[k].map(p=>`<tr><td class="tm">${POS[p.pos]} ${p.n}</td><td>${p.g||''}</td><td>${p.a||''}</td><td>${p.sh||''}</td><td class="${p.pm>0?'ok':p.pm<0?'bad':''}">${p.pm>0?'+':''}${p.pm||''}</td><td>${p.pim||''}</td><td>${mmss(p.toi*20)}</td></tr>`).join('')}
+  const plT=(k,t)=>`<div class="tbl-wrap"><table class="bx plt"><thead><tr><th>${tl(t,24)}</th><th>Г</th><th>П</th><th>Бр</th><th>±</th><th>Шт</th><th>Вр</th></tr></thead><tbody>${b.pl[k].map(p=>`<tr><td class="tm">${POS[p.pos]} ${p.n}</td><td>${p.g||''}</td><td>${p.a||''}</td><td>${p.sh||''}</td><td class="${p.pm>0?'ok':p.pm<0?'bad':''}">${p.pm>0?'+':''}${p.pm||''}</td><td>${p.pim||''}</td><td>${mmss(p.toi*20)}</td></tr>`).join('')}
   <tr><td class="tm">В ${b.gk[k].n}</td><td colspan="6" style="text-align:left">${b.gk[k].sa-b.gk[k].ga} сейвов из ${b.gk[k].sa}</td></tr></tbody></table></div>`;
   return `${live?'':`<div class="bx-head">${badge(h,64)}<div><b class="num">${b.sc[0]}:${b.sc[1]}</b><small>${b.so?'по буллитам':b.ot?'в овертайме':'основное время'} · ${b.d}</small></div>${badge(a,64)}</div>`}
   <section class="card"><h2>Голы</h2>${tbl('',b.pg)}<h2>Броски</h2>${tbl('',b.psh)}</section>
