@@ -23,7 +23,8 @@ function rateLimiter(perMin) {
 export function buildApp({ pool, cfg, logger = true }) {
   const app = Fastify({ logger, bodyLimit: MAX_SAVE, trustProxy: true });
   const allow = rateLimiter(cfg.rateLimit || 240);
-  const origins = new Set((cfg.corsOrigins || '').split(',').map((s) => s.trim()).filter(Boolean));
+  // https://localhost — так выглядит адрес игры внутри Android-приложения (Capacitor)
+  const origins = new Set([...(cfg.corsOrigins || '').split(','), 'https://localhost'].map((s) => s.trim()).filter(Boolean));
 
   app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer', bodyLimit: MAX_SAVE }, (req, body, done) => done(null, body));
 
@@ -46,7 +47,14 @@ export function buildApp({ pool, cfg, logger = true }) {
     const h = req.headers.authorization || '';
     const p = readToken(h.startsWith('Bearer ') ? h.slice(7) : '', cfg.sessionSecret);
     if (!p) return reply.code(401).send({ error: 'unauthorized' });
+    // аккаунт устройства, которое уже привязали к Telegram, больше не используется: пусть войдёт заново
+    const u = (await pool.query('SELECT tg_id, EXISTS (SELECT 1 FROM devices d WHERE d.user_id=u.id) AS dev FROM users u WHERE id=$1', [p.uid])).rows[0];
+    if (!u || (u.tg_id == null && !u.dev)) return reply.code(401).send({ error: 'relogin' });
     req.uid = p.uid;
+  };
+  const saveInfo = async (uid) => {
+    const s = await pool.query('SELECT ver, meta, size, updated_at FROM saves WHERE user_id=$1 AND slot=0', [uid]);
+    return s.rows[0] ? { ver: s.rows[0].ver, meta: s.rows[0].meta, size: s.rows[0].size, updatedAt: s.rows[0].updated_at } : null;
   };
 
   app.get('/api/health', async () => {
@@ -65,9 +73,40 @@ export function buildApp({ pool, cfg, logger = true }) {
       [u.id, u.first_name || null, u.username || null, u.language_code || null]
     );
     const { id, created } = r.rows[0];
-    const s = await pool.query('SELECT ver, meta, size, updated_at FROM saves WHERE user_id=$1 AND slot=0', [id]);
-    const save = s.rows[0] ? { ver: s.rows[0].ver, meta: s.rows[0].meta, size: s.rows[0].size, updatedAt: s.rows[0].updated_at } : null;
-    return { token: issueToken(id, cfg.sessionSecret), user: { id, name: u.first_name || '', created }, save };
+    return { token: issueToken(id, cfg.sessionSecret), user: { id, name: u.first_name || '', created, linked: true }, save: await saveInfo(id) };
+  });
+
+  // Вход из Android-приложения: устройство присылает свой случайный id и секрет
+  app.post('/api/auth/device', async (req, reply) => {
+    const id = String(req.body?.id || ''), secret = String(req.body?.secret || '');
+    if (!/^[0-9a-f]{32}$/.test(id) || !/^[0-9a-f]{64}$/.test(secret)) return reply.code(400).send({ error: 'bad_device' });
+    const hash = crypto.createHash('sha256').update(secret).digest('hex');
+    const platform = String(req.body?.platform || '').slice(0, 20) || null;
+    const d = (await pool.query('SELECT secret_hash, user_id FROM devices WHERE id=$1', [id])).rows[0];
+    let uid, created = false;
+    if (d) {
+      if (!crypto.timingSafeEqual(Buffer.from(d.secret_hash), Buffer.from(hash))) return reply.code(401).send({ error: 'bad_device' });
+      uid = d.user_id;
+      await pool.query('UPDATE devices SET last_seen=now() WHERE id=$1', [id]);
+      await pool.query('UPDATE users SET last_seen=now() WHERE id=$1', [uid]);
+    } else {
+      uid = (await pool.query('INSERT INTO users DEFAULT VALUES RETURNING id')).rows[0].id;
+      await pool.query('INSERT INTO devices (id, secret_hash, user_id, platform) VALUES ($1,$2,$3,$4)', [id, hash, uid, platform]);
+      created = true;
+    }
+    const u = (await pool.query('SELECT tg_id, first_name FROM users WHERE id=$1', [uid])).rows[0];
+    return { token: issueToken(uid, cfg.sessionSecret), user: { id: uid, name: u.first_name || '', created, linked: u.tg_id != null }, save: await saveInfo(uid) };
+  });
+
+  // Код для привязки Telegram: приложение открывает бота с этим кодом
+  app.post('/api/link/start', { preHandler: auth }, async (req) => {
+    const ABC = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (const b of crypto.randomBytes(6)) code += ABC[b % ABC.length];
+    await pool.query('DELETE FROM link_codes WHERE user_id=$1 OR expires_at < now()', [req.uid]);
+    await pool.query("INSERT INTO link_codes (code, user_id, expires_at) VALUES ($1,$2, now() + interval '15 minutes')", [code, req.uid]);
+    const bot = cfg.botUsername || 'hmrurubot';
+    return { code, url: `https://t.me/${bot}?start=link_${code}`, tg: `tg://resolve?domain=${bot}&start=link_${code}` };
   });
 
   // Скачать сохранение
@@ -176,7 +215,7 @@ export function buildApp({ pool, cfg, logger = true }) {
   if (cfg.botToken && cfg.webhookPath) {
     app.post(`/bot/${cfg.webhookPath}`, async (req, reply) => {
       if (cfg.webhookSecret && req.headers['x-telegram-bot-api-secret-token'] !== cfg.webhookSecret) return reply.code(401).send();
-      handleUpdate(req.body, cfg, app.log).catch((e) => app.log.warn({ err: e }, 'bot update failed'));
+      handleUpdate(req.body, cfg, app.log, pool).catch((e) => app.log.warn({ err: e }, 'bot update failed'));
       return { ok: true };
     });
   }

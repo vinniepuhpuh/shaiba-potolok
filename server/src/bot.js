@@ -1,3 +1,4 @@
+import { linkTelegram } from './link.js';
 /** Ответы бота. Сейчас: /start с кнопкой «Играть». Позже здесь будут платежи за звёзды. */
 // Из российских дата-центров api.telegram.org часто недоступен, поэтому по умолчанию
 // вызовы идут через ретранслятор на Vercel (api/tg.js в репозитории). TG_RELAY=direct — напрямую.
@@ -15,9 +16,20 @@ export async function tg(cfg, method, payload) {
   return j.result;
 }
 
-export async function handleUpdate(u, cfg, log) {
+export async function handleUpdate(u, cfg, log, pool) {
   const m = u && u.message;
   if (!m || !m.text) return;
+  const lk = m.text.match(/^\/start\s+link_([A-Z0-9]{6})\b/);
+  if (lk && pool && m.from) {
+    const r = await linkTelegram(pool, lk[1], m.from);
+    await tg(cfg, 'sendMessage', {
+      chat_id: m.chat.id,
+      text: r.ok
+        ? 'Готово! Приложение привязано к вашему Telegram: теперь у вас одно сохранение и в приложении, и в боте.\n\nВернитесь в приложение Генменеджер.'
+        : 'Код устарел. Откройте приложение и нажмите «Привязать Telegram» ещё раз.',
+    });
+    return;
+  }
   if (/^\/start\b/.test(m.text)) {
     await tg(cfg, 'sendMessage', {
       chat_id: m.chat.id,

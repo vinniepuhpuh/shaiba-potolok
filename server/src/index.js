@@ -14,6 +14,7 @@ const cfg = {
   adminKey: env.ADMIN_KEY || '',
   corsOrigins: env.CORS_ORIGINS || 'https://shaiba-potolok.vercel.app',
   gameUrl: env.GAME_URL || 'https://shaiba-potolok.vercel.app',
+  botUsername: env.BOT_USERNAME || 'hmrurubot',
   publicUrl: env.PUBLIC_URL || '',
   webhookPath: env.BOT_WEBHOOK_PATH || '',
   webhookSecret: env.BOT_WEBHOOK_SECRET || '',

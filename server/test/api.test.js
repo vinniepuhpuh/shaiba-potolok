@@ -5,6 +5,8 @@ import zlib from 'node:zlib';
 import { buildApp } from '../src/app.js';
 import { makePool, migrate } from '../src/db.js';
 import { signInitData, verifyInitData, issueToken, readToken } from '../src/auth.js';
+import { linkTelegram } from '../src/link.js';
+import crypto from 'node:crypto';
 
 const BOT = '123456:TEST_TOKEN';
 const cfg = { botToken: BOT, sessionSecret: 'test-secret', adminKey: 'admin-key', corsOrigins: 'https://game.example', rateLimit: 10000 };
@@ -16,7 +18,7 @@ const initFor = (id, extra = {}) =>
 
 before(async () => {
   pool = makePool(url);
-  await pool.query('DROP TABLE IF EXISTS events, saves, users, _migrations CASCADE');
+  await pool.query('DROP TABLE IF EXISTS link_codes, devices, events, saves, users, _migrations CASCADE');
   await migrate(pool, { info() {} });
   app = buildApp({ pool, cfg, logger: false });
   await app.ready();
@@ -117,4 +119,50 @@ test('CORS', async () => {
   assert.equal(r.headers['access-control-allow-origin'], 'https://game.example');
   r = await app.inject({ method: 'OPTIONS', url: '/api/save', headers: { origin: 'https://evil.example' } });
   assert.equal(r.headers['access-control-allow-origin'], undefined);
+});
+
+test('приложение: вход по устройству и привязка Telegram', async () => {
+  const dev = { id: crypto.randomBytes(16).toString('hex'), secret: crypto.randomBytes(32).toString('hex'), platform: 'android' };
+  let r = await app.inject({ method: 'POST', url: '/api/auth/device', payload: { id: 'x', secret: 'y' } });
+  assert.equal(r.statusCode, 400);
+  r = await app.inject({ method: 'POST', url: '/api/auth/device', payload: dev });
+  const a = r.json();
+  assert.equal(a.user.created, true);
+  assert.equal(a.user.linked, false);
+  const H = { authorization: 'Bearer ' + a.token };
+  // чужой секрет не подходит
+  r = await app.inject({ method: 'POST', url: '/api/auth/device', payload: { ...dev, secret: crypto.randomBytes(32).toString('hex') } });
+  assert.equal(r.statusCode, 401);
+  // повторный вход тем же устройством — тот же аккаунт
+  r = await app.inject({ method: 'POST', url: '/api/auth/device', payload: dev });
+  assert.equal(r.json().user.id, a.user.id);
+  // сохранение с устройства
+  const gz = zlib.gzipSync(JSON.stringify({ v: 6, season: 2026 }));
+  r = await app.inject({ method: 'PUT', url: '/api/save?base=0', headers: { ...H, 'content-type': 'application/octet-stream' }, payload: gz });
+  assert.equal(r.json().ver, 1);
+  // код привязки
+  r = await app.inject({ method: 'POST', url: '/api/link/start', headers: H });
+  const { code, url } = r.json();
+  assert.match(code, /^[A-Z0-9]{6}$/);
+  assert.match(url, /t\.me\/hmrurubot\?start=link_/);
+  // Telegram-игрок без сохранения: сохранение устройства переезжает к нему
+  const res = await linkTelegram(pool, code, { id: 777001, first_name: 'Аня' });
+  assert.equal(res.ok, true);
+  assert.equal(res.moved, true);
+  assert.equal((await linkTelegram(pool, code, { id: 777001 })).ok, false, 'код одноразовый');
+  // старый токен устройства больше не работает
+  r = await app.inject({ method: 'GET', url: '/api/save', headers: H });
+  assert.equal(r.statusCode, 401);
+  // новый вход устройства — уже Telegram-аккаунт с перенесённым сохранением
+  r = await app.inject({ method: 'POST', url: '/api/auth/device', payload: dev });
+  const b = r.json();
+  assert.notEqual(b.user.id, a.user.id);
+  assert.equal(b.user.linked, true);
+  assert.equal(b.save.ver, 1);
+  // вход через Telegram видит тот же аккаунт
+  r = await app.inject({ method: 'POST', url: '/api/auth', payload: { initData: initFor(777001) } });
+  assert.equal(r.json().user.id, b.user.id);
+  // CORS для приложения
+  r = await app.inject({ method: 'OPTIONS', url: '/api/save', headers: { origin: 'https://localhost' } });
+  assert.equal(r.headers['access-control-allow-origin'], 'https://localhost');
 });
