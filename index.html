@@ -516,7 +516,7 @@ function news(t,ty,me){
 }
 
 let _R=null,_pres=null,_co=null,_rk=null,_ci=null;
-function inv(){_R=null;_pres=null;_co=null;_rk=null;_ci=null;_ti=null;}
+function inv(){_R=null;_pres=null;_co=null;_rk=null;_ci=null;_ti=null;if(typeof S!=='undefined'&&S&&S.draft)draftSync();}
 function allR(){if(!_R){const M=idx();_R={};S.teams.forEach(t=>_R[t.id]=rating(t.id,null,M));}return _R;}
 function rPct(tid){const R_=allR(),me=R_[tid].t;return S.teams.filter(t=>R_[t.id].t<me).length/31;}
 function rRank(tid,k='t'){const R_=allR();return S.teams.filter(t=>R_[t.id][k]>R_[tid][k]).length+1;}
@@ -1718,13 +1718,19 @@ function aiChoose(own,tid){
   const pool=S.players.filter(p=>p.team===-2);if(!pool.length)return null;
   return pool.map(p=>({p,s:p.pot*(own==='build'?1.1:1)+p.ovr*.3+R()*8+natB(p,tid)*1.5})).sort((a,b)=>b.s-a.s)[0].p;
 }
+/* the draft order is fixed when the offseason starts, but picks can still be traded: always take the current owner */
+function draftSync(){
+  const D=S.draft;if(!D)return;
+  const by=new Map(S.picks.map(k=>[k.id,k.own]));
+  for(let j=D.i;j<D.seq.length;j++){const o=by.get(D.seq[j].pk);if(o!=null)D.seq[j].own=o;}
+}
 function autoDraft(){
-  const D=S.draft;
+  const D=S.draft;draftSync();
   while(D.i<D.seq.length&&D.seq[D.i].own!==S.user){const s=D.seq[D.i],p=aiChoose(T(s.own).own,s.own);if(!p)break;draftTo(p,s);D.i++;}
   if(D.i>=D.seq.length)endDraft();
 }
 function userDraft(id){
-  const p=P(id),D=S.draft;if(!p||p.team!==-2||!D||D.i>=D.seq.length||D.seq[D.i].own!==S.user)return;
+  const p=P(id),D=S.draft;draftSync();if(!p||p.team!==-2||!D||D.i>=D.seq.length||D.seq[D.i].own!==S.user)return;
   const eo=estO(p),e=est(p),s=D.seq[D.i];draftTo(p,s);
   news(`Драфт №${s.n}: ${full(p)} (${posT(p)}, ${roleTxt(p)}). Скауты оценивали ~${eo}/${e}, на деле ${p.ovr}/${p.pot}.`);
   D.i++;autoDraft();
@@ -1892,6 +1898,7 @@ function load(){try{const s=localStorage.getItem(KEY);if(s){const o=JSON.parse(s
 
 /* ---------- changelog ---------- */
 const CHANGES=[
+  {v:'2026-11-07b',d:'7 ноября',t:'Исправлен драфт',items:['Пики, полученные в обменах после окончания сезона, теперь действительно ваши на драфте. Раньше очередь драфта считалась в конце сезона, и такие пики использовали прежние владельцы.']},
   {v:'2026-11-07a',d:'7 ноября',t:'Полноэкранный режим',items:['Верхняя панель с клубом и потолком больше не прячется под часами и кнопками Telegram на телефоне.']},
   {v:'2026-11-06a',d:'6 ноября',t:'Облачные сохранения',items:[
     'Игра сохраняется в облаке, если играть через Telegram. Можно продолжить с другого телефона или компьютера.',
