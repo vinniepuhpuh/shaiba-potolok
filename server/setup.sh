@@ -66,6 +66,7 @@ touch /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys
 grep -qF "$(cat "$KEY.pub")" /root/.ssh/authorized_keys || echo "$LINE" >> /root/.ssh/authorized_keys
 
 say "Запускаю сервер (первый раз 2–5 минут)"
+mkdir -p www && cp ../index.html www/index.html
 docker compose up -d --build
 
 say "Жду, пока сервер ответит по https://$DOMAIN"

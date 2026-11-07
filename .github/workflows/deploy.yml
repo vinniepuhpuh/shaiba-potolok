@@ -3,7 +3,7 @@ name: Обновление сервера
 on:
   push:
     branches: [main]
-    paths: ['server/**']
+    paths: ['server/**', 'index.html']
   workflow_dispatch:
 
 concurrency:

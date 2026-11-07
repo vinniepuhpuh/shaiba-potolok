@@ -1,10 +1,19 @@
 {$DOMAIN} {
-	encode {
-		gzip
-		match {
-			header Content-Type application/json*
-		}
+	# json и html сжимаются, сохранения (уже gzip) — нет
+	encode gzip
+
+	@backend path /api/* /bot/* /admin
+	handle @backend {
+		reverse_proxy api:3000
 	}
-	reverse_proxy api:3000
+
+	# Сама игра: файлы из server/www (туда deploy.sh копирует index.html из корня репозитория)
+	handle {
+		root * /srv/game
+		header Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+
 	header -Server
 }
