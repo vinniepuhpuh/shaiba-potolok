@@ -2,7 +2,7 @@ gmhockey.ru, www.gmhockey.ru, {$DOMAIN} {
 	# json и html сжимаются, сохранения (уже gzip) — нет
 	encode gzip
 
-	@backend path /api/* /bot/* /admin
+	@backend path /api/* /bot/* /admin /privacy
 	handle @backend {
 		reverse_proxy api:3000
 	}

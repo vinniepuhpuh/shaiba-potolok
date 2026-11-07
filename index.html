@@ -2941,7 +2941,7 @@ async function cloudAuth(){
   const tg=!!(TG&&TG.initData);
   const r=await apiF(tg?'/api/auth':'/api/auth/device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(tg?{initData:TG.initData}:{...devCreds(),platform:'android'})},6000);
   if(!r.ok)throw new Error('auth '+r.status);
-  const a=await r.json();CL.token=a.token;CL.on=true;CL.st='ok';CL.linked=tg||!!(a.user&&a.user.linked);return a;
+  const a=await r.json();CL.token=a.token;CL.on=true;CL.st='ok';CL.linked=tg||!!(a.user&&a.user.linked);CL.uid=a.user&&a.user.id;return a;
 }
 async function cloudPull(){
   const r=await apiF('/api/save',{},15000);
@@ -3000,7 +3000,7 @@ function cloudStatusHTML(){
   if(CL.conflict)return `<p class="sub warn">Сохранения на этом устройстве и в облаке разошлись.</p><button class="btn pri" data-a="cloudSheet">Выбрать сохранение</button>`;
   const t={ok:`Сохранено в облаке${CL.at?` · ${hhmm(CL.at)}`:''}. ${CAP?'':'Можно продолжить с другого устройства в Telegram.'}`,sync:'Сохраняю в облако…',offline:'Нет связи с сервером. Прогресс сохраняется на устройстве и уйдёт в облако, когда связь появится.',off:'Подключаюсь к облаку…'}[CL.st]||'';
   const link=CAP?(CL.linked?'<p class="small muted">Привязан Telegram: то же сохранение открывается в боте @hmrurubot.</p>':`<button class="btn" data-a="linkTg">Привязать Telegram</button><p class="small muted">Тогда одно сохранение будет и здесь, и в боте @hmrurubot. Если вы уже играли в боте, приложение предложит выбрать, какую игру оставить.</p>`):'';
-  return `<p class="sub">${CL.st==='ok'&&!CL.dirty?'☁️ ':''}${t}</p>${link}`;
+  return `<p class="sub">${CL.st==='ok'&&!CL.dirty?'☁️ ':''}${t}</p>${link}${CL.uid?`<p class="small muted">Номер игрока: ${CL.uid}</p>`:''}`;
 }
 function sheetCloud(){
   const c=CL.conflict;if(!c)return '<div class="stack"><h3>Облако</h3><p class="sub">Всё в порядке.</p><button class="btn" data-a="close">Закрыть</button></div>';

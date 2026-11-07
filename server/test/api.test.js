@@ -111,6 +111,8 @@ test('события и сводка', async () => {
   r = await app.inject({ method: 'GET', url: '/admin' });
   assert.equal(r.statusCode, 200);
   assert.match(r.body, /Генменеджер · статистика/);
+  r = await app.inject({ method: 'GET', url: '/privacy' });
+  assert.match(r.body, /Политика конфиденциальности/);
 });
 
 test('CORS', async () => {

@@ -210,6 +210,8 @@ export function buildApp({ pool, cfg, logger = true }) {
   // Страница статистики (данные она берёт из /api/admin/stats по ключу, который вводится на странице)
   const adminHtml = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'admin', 'index.html'));
   app.get('/admin', async (req, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store').header('X-Robots-Tag', 'noindex').send(adminHtml));
+  const privacyHtml = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'admin', 'privacy.html'));
+  app.get('/privacy', async (req, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'public, max-age=3600').send(privacyHtml));
 
   // Вебхук бота: /bot/<BOT_WEBHOOK_PATH>
   if (cfg.botToken && cfg.webhookPath) {
