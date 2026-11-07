@@ -1,4 +1,4 @@
-{$DOMAIN} {
+gmhockey.ru, www.gmhockey.ru, {$DOMAIN} {
 	# json и html сжимаются, сохранения (уже gzip) — нет
 	encode gzip
 
