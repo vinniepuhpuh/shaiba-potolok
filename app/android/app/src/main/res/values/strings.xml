@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Генменеджер</string>
+    <string name="title_activity_main">Генменеджер</string>
+    <string name="package_name">ru.gmhockey.app</string>
+    <string name="custom_url_scheme">ru.gmhockey.app</string>
+</resources>

@@ -1,0 +1,22 @@
+{
+  "name": "genmanager-android",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Android-приложение «Генменеджер» (Capacitor) — та же игра, что в Telegram",
+  "scripts": {
+    "www": "node scripts/prepare-www.mjs",
+    "sync": "npm run www && npx cap sync android",
+    "icons": "npx capacitor-assets generate --android --iconBackgroundColor '#0e1c2b' --splashBackgroundColor '#0e1c2b'"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.6.0",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/app-launcher": "8.0.1",
+    "@capacitor/browser": "8.0.5",
+    "@capacitor/core": "8.6.0"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "4.0.0",
+    "@capacitor/cli": "8.6.0"
+  }
+}

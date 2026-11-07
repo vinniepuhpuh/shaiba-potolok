@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Unbounded:wght@600;800&display=swap">
-<style>:root{--st:max(env(safe-area-inset-top,0px),calc(var(--tg-safe-area-inset-top,0px) + var(--tg-content-safe-area-inset-top,0px)));--sb:max(env(safe-area-inset-bottom,0px),calc(var(--tg-safe-area-inset-bottom,0px) + var(--tg-content-safe-area-inset-bottom,0px)))}
+<style>:root{--st:max(env(safe-area-inset-top,0px),var(--safe-area-inset-top,0px),calc(var(--tg-safe-area-inset-top,0px) + var(--tg-content-safe-area-inset-top,0px)));--sb:max(env(safe-area-inset-bottom,0px),var(--safe-area-inset-bottom,0px),calc(var(--tg-safe-area-inset-bottom,0px) + var(--tg-content-safe-area-inset-bottom,0px)))}
 :root{padding-top:var(--st);padding-bottom:var(--sb)}body{margin:0;font-size:14px}img{max-width:100%}[hidden]{display:none!important}.feed li.post div{color:var(--warn)}
 
 .gpop{position:fixed;left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));top:calc(96px + var(--st));max-width:528px;margin:0 auto;z-index:4;background:var(--surface);color:var(--ink);border-radius:16px;padding:12px 14px;box-shadow:0 10px 30px #0007;border:2px solid var(--red);display:flex;flex-direction:column;gap:4px;pointer-events:none}
@@ -2744,6 +2744,7 @@ function act(a,id){
     case 'tourPrev':tourGo(U.tour.i-1);window.scrollTo(0,0);break;
     case 'tourSkip':track('tour_skip',{i:U.tour?U.tour.i:0});U.tour=null;S.tutDone=true;break;
     case 'cloudSheet':U.sheet={type:'cloud'};break;
+    case 'linkTg':linkStart();break;
     case 'codeOpen':U.codeMsg=null;U.sheet={type:'code'};break;
     case 'codeGo':{const el=document.getElementById('codeIn');U.codeMsg=useCode(el?el.value:'');if(U.codeMsg.ok){inv();}break;}
     case 'cloudTake':{U.sheet=null;stopTimer();const app=document.getElementById('app');if(app)app.innerHTML='<p class="muted" style="padding:48px 16px;text-align:center">Загружаю сохранение…</p>';
@@ -2869,7 +2870,57 @@ const tgHaptic=k=>{try{TG&&TG.HapticFeedback&&(k==='goal'?TG.HapticFeedback.noti
 const API=(typeof window!=='undefined'&&window.GM_API)||'';
 const CK='gm-cloud';
 const CL={on:false,token:null,ver:0,dirty:false,gen:0,st:'off',at:null,busy:false,t:null,q:[],conflict:null,tries:0};
-const cloudable=()=>!!(TG&&TG.initData&&API);
+/* Android-приложение (Capacitor): своя авторизация по устройству, кнопка «Назад», внешние ссылки */
+const CAP=typeof window!=='undefined'&&window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform()?window.Capacitor:null;
+const CapP=n=>CAP&&CAP.Plugins?CAP.Plugins[n]:null;
+const cloudable=()=>!!(API&&((TG&&TG.initData)||CAP));
+function devCreds(){
+  let d=null;try{d=JSON.parse(localStorage.getItem('gm-dev')||'null');}catch(e){}
+  if(!d||!/^[0-9a-f]{32}$/.test(d.id||'')){
+    const hex=n=>Array.from(crypto.getRandomValues(new Uint8Array(n)),b=>b.toString(16).padStart(2,'0')).join('');
+    d={id:hex(16),secret:hex(32)};try{localStorage.setItem('gm-dev',JSON.stringify(d));}catch(e){}
+  }
+  return d;
+}
+function openExt(primary,fallback){
+  const L=CapP('AppLauncher'),B=CapP('Browser');
+  const web=()=>B?B.open({url:fallback}):window.open(fallback,'_blank');
+  if(L&&primary){L.openUrl({url:primary}).then(r=>{if(r&&r.completed===false)web();}).catch(web);return;}
+  web();
+}
+async function linkStart(){
+  try{
+    if(!CL.token)await cloudAuth();
+    const r=await apiF('/api/link/start',{method:'POST'},8000);if(!r.ok)throw new Error('link '+r.status);
+    const j=await r.json();CL.linkWait=true;
+    toast('Сейчас откроется Telegram: нажмите «Запустить» в боте и вернитесь в игру.');
+    setTimeout(()=>openExt(j.tg,j.url),600);
+  }catch(e){toast('Нет связи с сервером. Попробуйте позже.');}
+}
+/* после возврата из Telegram: аккаунт устройства уже переехал к Telegram-аккаунту */
+async function linkCheck(){
+  if(!CL.linkWait||!cloudable())return;
+  try{
+    const a=await cloudAuth();if(!a.user||!a.user.linked)return;
+    CL.linkWait=false;const sv=a.save;
+    if(sv&&sv.ver!==CL.ver){CL.conflict={ver:sv.ver,meta:sv.meta,at:sv.updatedAt};CL.st='conflict';U.sheet={type:'cloud'};}
+    else if(!sv){CL.ver=0;CL.dirty=true;clMetaSave();cloudPush(false);U.sheet=null;}
+    else U.sheet=null;
+    toast('Telegram привязан: теперь одно сохранение и в приложении, и в боте.');render();
+  }catch(e){}
+}
+function appInit(){
+  if(!CAP)return;
+  document.documentElement.classList.add('native');
+  const A=CapP('App');if(!A)return;
+  try{A.addListener('backButton',()=>{
+    if(U.tour){act('tourSkip');return;}
+    if(U.sheet){act('close');return;}
+    if(S&&S.user!=null&&!S.live&&U.tab!=='club'){act('tab','club');return;}
+    A.minimizeApp?A.minimizeApp():A.exitApp();
+  });}catch(e){}
+  try{A.addListener('resume',()=>{linkCheck();});A.addListener('pause',()=>{cloudPush(false);trackFlush();});}catch(e){}
+}
 function clMeta(){try{return JSON.parse(localStorage.getItem(CK)||'{}')||{};}catch(e){return {};}}
 function clMetaSave(){try{localStorage.setItem(CK,JSON.stringify({ver:CL.ver,dirty:CL.dirty,at:CL.at}));}catch(e){}}
 async function apiF(path,opt,ms){
@@ -2887,9 +2938,10 @@ const saveMeta=st=>{if(!st||st.user==null)return {};const t=st.teams[st.user];re
 const metaTxt=m=>m&&m.team?`${m.team}, сезон ${m.season}/${String((m.season||0)+1).slice(2)}${m.phase==='regular'?`, день ${m.day}`:m.phase==='playoffs'?', плей-офф':', межсезонье'}`:'пустое сохранение';
 const hhmm=iso=>{try{const d=new Date(iso);return d.toLocaleDateString('ru-RU',{day:'numeric',month:'short'})+' '+d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});}catch(e){return '';}};
 async function cloudAuth(){
-  const r=await apiF('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({initData:TG.initData})},6000);
+  const tg=!!(TG&&TG.initData);
+  const r=await apiF(tg?'/api/auth':'/api/auth/device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(tg?{initData:TG.initData}:{...devCreds(),platform:'android'})},6000);
   if(!r.ok)throw new Error('auth '+r.status);
-  const a=await r.json();CL.token=a.token;CL.on=true;CL.st='ok';return a;
+  const a=await r.json();CL.token=a.token;CL.on=true;CL.st='ok';CL.linked=tg||!!(a.user&&a.user.linked);return a;
 }
 async function cloudPull(){
   const r=await apiF('/api/save',{},15000);
@@ -2941,13 +2993,14 @@ async function trackFlush(){
   catch(e){if(CL.q.length<200)CL.q.unshift(...ev);}
 }
 if(typeof setInterval!=='undefined'&&typeof window!=='undefined')setInterval(()=>{if(CL.token)trackFlush();},30000);
-if(typeof document!=='undefined'&&document.addEventListener)document.addEventListener('visibilitychange',()=>{if(document.hidden&&cloudable()){cloudPush(false);trackFlush();}});
+if(typeof document!=='undefined'&&document.addEventListener)document.addEventListener('visibilitychange',()=>{if(document.hidden&&cloudable()){cloudPush(false);trackFlush();}else if(!document.hidden)linkCheck();});
 if(typeof window!=='undefined'&&window.addEventListener)window.addEventListener('pagehide',()=>{if(cloudable()){cloudPush(false);trackFlush();}});
 function cloudStatusHTML(){
   if(!cloudable())return '<p class="sub">Игра сохраняется автоматически на этом устройстве.</p>';
   if(CL.conflict)return `<p class="sub warn">Сохранения на этом устройстве и в облаке разошлись.</p><button class="btn pri" data-a="cloudSheet">Выбрать сохранение</button>`;
-  const t={ok:`Сохранено в облаке${CL.at?` · ${hhmm(CL.at)}`:''}. Можно продолжить с другого устройства в Telegram.`,sync:'Сохраняю в облако…',offline:'Нет связи с сервером. Прогресс сохраняется на устройстве и уйдёт в облако, когда связь появится.',off:'Подключаюсь к облаку…'}[CL.st]||'';
-  return `<p class="sub">${CL.st==='ok'&&!CL.dirty?'☁️ ':''}${t}</p>`;
+  const t={ok:`Сохранено в облаке${CL.at?` · ${hhmm(CL.at)}`:''}. ${CAP?'':'Можно продолжить с другого устройства в Telegram.'}`,sync:'Сохраняю в облако…',offline:'Нет связи с сервером. Прогресс сохраняется на устройстве и уйдёт в облако, когда связь появится.',off:'Подключаюсь к облаку…'}[CL.st]||'';
+  const link=CAP?(CL.linked?'<p class="small muted">Привязан Telegram: то же сохранение открывается в боте @hmrurubot.</p>':`<button class="btn" data-a="linkTg">Привязать Telegram</button><p class="small muted">Тогда одно сохранение будет и здесь, и в боте @hmrurubot. Если вы уже играли в боте, приложение предложит выбрать, какую игру оставить.</p>`):'';
+  return `<p class="sub">${CL.st==='ok'&&!CL.dirty?'☁️ ':''}${t}</p>${link}`;
 }
 function sheetCloud(){
   const c=CL.conflict;if(!c)return '<div class="stack"><h3>Облако</h3><p class="sub">Всё в порядке.</p><button class="btn" data-a="close">Закрыть</button></div>';
@@ -2957,7 +3010,7 @@ function sheetCloud(){
   <section class="card"><h2>На этом устройстве</h2><p class="small">${metaTxt(saveMeta(S))}</p><button class="btn" data-a="cloudKeep">Оставить это и записать в облако</button></section></div>`;
 }
 function boot(data){
-  tgInit();
+  tgInit();appInit();
   S=(data&&data.S)||load();
   if(S&&S.sty===undefined){S.sty='BAL';S.styAuto=S.tacAuto!==false;S.risk=nearRisk(S.tac||5.5);S.pullG=true;}
   if(S&&S.players)S.players.forEach(p=>{if(p.pos2===undefined||(p.pos==='D'&&!p.sd))rollPos2(p);});

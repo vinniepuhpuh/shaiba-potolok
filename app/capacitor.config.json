@@ -1,0 +1,15 @@
+{
+  "appId": "ru.gmhockey.app",
+  "appName": "Генменеджер",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#0e1c2b",
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "css",
+      "style": "DARK"
+    }
+  }
+}
