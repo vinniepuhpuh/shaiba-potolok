@@ -1898,7 +1898,7 @@ function load(){try{const s=localStorage.getItem(KEY);if(s){const o=JSON.parse(s
 
 /* ---------- changelog ---------- */
 const CHANGES=[
-  {v:'2026-11-07c',d:'7 ноября',t:'Коды',items:['В меню «⋯» появилась кнопка «Ввести код» — для компенсаций и подарков.','Код ДРАФТ2: если у вас сгорели пики на драфте, он даёт права на двух проспектов уровня первого раунда.']},
+  {v:'2026-11-07c',d:'7 ноября',t:'Коды',items:['В меню «⋯» появилась кнопка «Ввести код» — для компенсаций и подарков.']},
   {v:'2026-11-07b',d:'7 ноября',t:'Исправлен драфт',items:['Пики, полученные в обменах после окончания сезона, теперь действительно ваши на драфте. Раньше очередь драфта считалась в конце сезона, и такие пики использовали прежние владельцы.']},
   {v:'2026-11-07a',d:'7 ноября',t:'Полноэкранный режим',items:['Верхняя панель с клубом и потолком больше не прячется под часами и кнопками Telegram на телефоне.']},
   {v:'2026-11-06a',d:'6 ноября',t:'Облачные сохранения',items:[
@@ -2653,34 +2653,18 @@ function sheetHelp(){
   return `<div class="stack"><h3>Как играть</h3><p class="sub">Главные понятия игры коротко.</p><div class="gloss">${GLOSS.map(([a,b])=>`<div><b>${a}</b><p class="small">${b}</p></div>`).join('')}</div><button class="btn pri" data-a="tourAgain">Пройти обучение заново</button><button class="btn" data-a="close">Закрыть</button></div>`;
 }
 /* ---------- codes (compensations, gifts) ---------- */
-const CODES={
-  'ДРАФТ2':{d:'Компенсация за пики, сгоревшие на драфте',run(){
-    const ref=S.players.filter(p=>p.pickN>=8&&p.pickN<=24&&p.dLbl&&p.age<=21);
-    const avg=(f,dflt)=>ref.length?Math.round(ref.reduce((a,p)=>a+f(p),0)/ref.length):dflt;
-    const ovr=avg(p=>p.ovr,56),pot=avg(p=>p.pot,82),yr=S.draft?S.draft.yr:(S.phase==='offseason'?S.season+1:S.season);
-    const got=[];
-    for(let i=0;i<2;i++){
-      const p=newPlayer(pick(['C','LW','RW','D']),50,ri(18,19));
-      p.ovr=clamp(ovr+ri(-2,2),45,70);p.pot=clamp(pot+ri(-2,2),p.ovr+6,95);
-      p.team=-3;p.rights=S.user;p.rY=2;p.pickN=[18,24][i];p.dLbl=`Компенсация за драфт ${yr}`;
-      uniqName(p,S.user);S.players.push(p);got.push(p);
-    }
-    news(`Компенсация за драфт: права на ${got.map(p=>`${full(p)} (${posT(p)}, ${p.ovr}/${p.pot})`).join(' и ')}. Они в «Состав» → «Права».`,'club',true);
-    return `Получены права на двух проспектов уровня первого раунда: ${got.map(p=>nm(p)).join(', ')}. Смотрите «Состав» → «Права».`;
-  }}
-};
-CODES.DRAFT2=CODES['ДРАФТ2'];
+const CODES={};
 function useCode(raw){
   const k=String(raw||'').trim().toUpperCase().replace(/\s+/g,'');
-  const c=CODES[k];if(!c)return {ok:false,t:'Такого кода нет.'};
-  S.codes=S.codes||[];const id=c===CODES.DRAFT2?'ДРАФТ2':k;
+  const c=CODES[k];if(!c)return {ok:false,t:'Такого кода нет или он больше не действует.'};
+  S.codes=S.codes||[];const id=c.id||k;
   if(S.codes.includes(id))return {ok:false,t:'Этот код уже использован в этой игре.'};
   if(S.user==null)return {ok:false,t:'Сначала выберите клуб.'};
   const t=c.run();S.codes.push(id);return {ok:true,t};
 }
 function sheetCode(){
   return `<div class="stack"><h3>Ввести код</h3><p class="sub">Коды для компенсаций и подарков. Каждый действует один раз в игре.</p>
-  <input id="codeIn" class="inp" autocomplete="off" autocapitalize="characters" placeholder="Например, ДРАФТ2" style="font:inherit;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--sunk);color:var(--ink)">
+  <input id="codeIn" class="inp" autocomplete="off" autocapitalize="characters" placeholder="Код" style="font:inherit;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--sunk);color:var(--ink)">
   ${U.codeMsg?`<p class="small ${U.codeMsg.ok?'ok':'bad'}">${U.codeMsg.t}</p>`:''}
   <div class="btn-row"><button class="btn" data-a="close">Закрыть</button><button class="btn pri" data-a="codeGo">Применить</button></div></div>`;
 }
