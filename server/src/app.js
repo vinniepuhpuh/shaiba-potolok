@@ -245,6 +245,26 @@ export function buildApp({ pool, cfg, logger = true, online = null }) {
     reply.header('Cache-Control', 'no-store');
     return g;
   });
+  app.get('/api/online/team/:id', async (req, reply) => {
+    if (!online || !online.active) return reply.code(404).send({ error: 'no_season' });
+    const v = online.team(Number(req.params.id), softUid(req));
+    if (!v) return reply.code(404).send({ error: 'no_team' });
+    reply.header('Cache-Control', 'no-store');
+    return v;
+  });
+  app.post('/api/online/plan', { preHandler: auth }, async (req, reply) => {
+    if (!online || !online.active) return reply.code(404).send({ error: 'no_season' });
+    const b = req.body || {};
+    const r = await online.plan(req.uid, b.key === 'def' ? 'def' : String(Number(b.key)), b.plan ?? null);
+    if (r.error) return reply.code(409).send(r);
+    return r;
+  });
+  app.post('/api/online/lines', { preHandler: auth }, async (req, reply) => {
+    if (!online || !online.active) return reply.code(404).send({ error: 'no_season' });
+    const r = await online.lines(req.uid, req.body || {});
+    if (r.error) return reply.code(409).send(r);
+    return r;
+  });
   app.post('/api/admin/online/create', async (req, reply) => {
     if (!adminOk(req)) return reply.code(401).send({ error: 'unauthorized' });
     if (!online) return reply.code(503).send({ error: 'online_disabled' });

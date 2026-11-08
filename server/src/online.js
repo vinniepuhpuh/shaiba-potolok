@@ -1,6 +1,6 @@
 import zlib from 'node:zlib';
 import { loadGame } from './engine.js';
-import { createSeason, runDue, publicView, joinSeason } from './league.js';
+import { createSeason, runDue, publicView, joinSeason, teamView, setPlan, setLines } from './league.js';
 
 /** Онлайн-режим: один активный сезон в памяти, все изменения по очереди, состояние сохраняется в базу. */
 export function makeOnline(pool, htmlPath, log = console) {
@@ -14,7 +14,7 @@ export function makeOnline(pool, htmlPath, log = console) {
   async function init() {
     G = loadGame(htmlPath);
     const r = (await pool.query("SELECT id, state FROM online_seasons WHERE status IN ('active','finished') ORDER BY id DESC LIMIT 1")).rows[0];
-    if (r) { sid = r.id; S = r.state; }
+    if (r) { sid = r.id; S = r.state; G.S = S; S.teams.forEach((t) => G.ev('ensureNums')(t.id)); }
     log.info?.(`online: движок ${G.version}, сезон ${sid ?? 'нет'}`);
   }
   async function tick(now = Date.now()) {
@@ -70,7 +70,14 @@ export function makeOnline(pool, htmlPath, log = console) {
     const n = done ? ticks.length : Math.min(ticks.length, Math.floor((now - t) / (liveMs / ticks.length)) + 1);
     const lastTick = ticks[n - 1], secNow = lastTick ? (lastTick[0] >= 4 ? 3600 + (lastTick[1] - 180) * 20 : lastTick[1] * 20) : 0;
     const ev = done ? row.ev : (row.ev || []).filter((e) => (e.per - 1) * 1200 + e.s <= secNow);
-    return { gid, t, home: row.home, away: row.away, kind: row.kind, started: true, done, liveMs, total: ticks.length, ticks: ticks.slice(0, n), ev, res: done ? row.res : null, box: done ? row.box : null };
+    return { gid, t, home: row.home, away: row.away, kind: row.kind, started: true, done, liveMs, total: ticks.length, ticks: ticks.slice(0, n), ev, res: done ? row.res : null, box: done ? row.box : null, rost: row.box && row.box.rost, gk: row.box && row.box.gkId, sty: row.box && row.box.sty };
   }
-  return { init, tick, create, view, join, touch, game, get active() { return !!S; } };
+  function team(tid, uid) { if (!S) return null; return teamView(G, S, tid, uid); }
+  async function plan(uid, key, p, now = Date.now()) {
+    return q(async () => { if (!S) return { error: 'no_season' }; const r = setPlan(S, uid, key, p, now); if (r.ok) await save(); return r; });
+  }
+  async function lines(uid, body, now = Date.now()) {
+    return q(async () => { if (!S) return { error: 'no_season' }; const r = setLines(G, S, uid, body, now); if (r.ok) await save(); return r; });
+  }
+  return { init, tick, create, view, join, touch, game, team, plan, lines, get active() { return !!S; } };
 }

@@ -95,6 +95,7 @@ export function createSeason(G, cfgIn, now = Date.now()) {
   G.ev('topUpFA')(30);
   S.players.filter((p) => p.team === -1).forEach((p) => G.ev('setAsk')(p));
   S.players.forEach((p) => { p.ovr0 = p.ovr; p.pot0 = p.pot; p.gx = 0; });
+  S.teams.forEach((t) => G.ev('ensureNums')(t.id));
   S.phase = 'regular'; S.day = 0; S.sched = []; S.news = []; S.offers = []; S.box = []; S.chem = {}; S.lines = null;
 
   // слоты регулярки
@@ -202,7 +203,8 @@ function playGame(G, S, g, kind) {
   const r = G.ev(`(()=>{const L=newLive(${g.h},${g.a},'${kind}');prep(L);const log=[];
     while(!L.done){if(L.pause){L.pause=null;prep(L);}stepTick(L);const v=L.vis||{},ic=v.ice||[[],[]];
       log.push([L.per,L.tick,L.sc[0],L.sc[1],v.poss,v.zone,v.shot,v.goal,v.post,ic[0],ic[1],L.pen[0].length,L.pen[1].length]);}
-    const res=finishLive(L);return {res,log,ev:L.ev,box:S.box[0],sty:L.sty,tac:L.tac,so:!!L.so,ot:!!L.ot};})()`);
+    const X=liveX(L),rost={};for(const p of S.players)if(p.team===L.h||p.team===L.a)rost[p.id]=[p.num||0,p.pos,p.f,p.l,p.nat];
+    const res=finishLive(L);const box=S.box[0];box.gkId=[X[0].g,X[1].g];box.rost=rost;box.sty=L.sty;return {res,log,ev:L.ev,box,sty:L.sty,tac:L.tac,so:!!L.so,ot:!!L.ot};})()`);
   return JSON.parse(JSON.stringify(r));
 }
 
@@ -308,4 +310,77 @@ export function joinSeason(S, team, uid, name, now = Date.now()) {
   if (cur && !cur.bot) return { error: 'taken' };
   o.humans[team] = { uid, name: name || 'Менеджер', joinedAt: now, lastSeen: now, plans: {}, lines: null };
   return { ok: true, team };
+}
+
+// ---------- клуб для экрана «Состав» ----------
+const LMODES = ['best', 'combo', 'keep'];
+function linesFor(G, S, tid) {
+  const h = S.online.humans[tid];
+  G.S = S; G.HOOK.lines = {};
+  if (h && !h.bot && h.lines) {
+    return G.ev('(L,tid)=>{const act=new Set(healthy(tid).map(p=>p.id)),seen=new Set();const ok=id=>{if(id==null||!act.has(id)||seen.has(id))return null;seen.add(id);return id;};const C={f:L.f.map(l=>l.map(ok)),d:L.d.map(l=>l.map(ok)),g:L.g.map(ok)};fillLines(C,healthy(tid));return C;}')(h.lines, tid);
+  }
+  return JSON.parse(JSON.stringify(G.ev('autoLines')(tid)));
+}
+export function teamView(G, S, tid, uid) {
+  const o = S.online, t = S.teams[tid];
+  if (!t) return null;
+  G.S = S;
+  const h = o.humans[tid], mine = !!(h && h.uid === uid);
+  const L = linesFor(G, S, tid);
+  const M = G.ev('idx')();
+  const fits = G.ev('fitsAll')(tid, L, M);
+  const players = S.players.filter((p) => p.team === tid).map((p) => ({
+    id: p.id, f: p.f, l: p.l, nat: p.nat, pos: p.pos, pos2: p.pos2 || null, sd: p.sd || null, age: p.age, ovr: p.ovr, role: p.role || null,
+    num: p.num || null, inj: p.inj || 0, sal: p.sal, yrs: p.yrs, gp: p.gp || 0, g: p.g || 0, a: p.a || 0,
+    gsa: p.gsa || 0, gga: p.gga || 0, gw: p.gw || 0, gso: p.gso || 0,
+    ...(mine ? { pot: p.pot, d: p.ovr - p.ovr0 } : {}),
+  }));
+  const fit = {}; for (const k in fits) fit[k] = Math.round(fits[k] * 100) / 100;
+  return { id: tid, mine, players, lines: L, fit, sty: t.sty || null,
+    plans: mine ? (h.plans || {}) : null, lmode: mine ? (h.lmode || null) : null, manual: mine ? !!h.lines : null };
+}
+const STYK = ['FC', 'PO', 'TR', 'CA', 'BAL'];
+/** План на матч: key — номер слота или 'def' (по умолчанию). plan=null — удалить. */
+export function setPlan(S, uid, key, plan, now = Date.now()) {
+  const o = S.online, e = Object.entries(o.humans).find(([, h]) => h && h.uid === uid);
+  if (!e) return { error: 'not_joined' };
+  const h = e[1];
+  if (key !== 'def') {
+    const sl = o.slots[Number(key)];
+    if (!sl) return { error: 'no_slot' };
+    if (sl.t <= now) return { error: 'started' };
+    if (!sl.games.some((g) => g.h === +e[0] || g.a === +e[0])) return { error: 'not_your_game' };
+  }
+  h.plans = h.plans || {};
+  if (plan == null) { delete h.plans[key]; return { ok: true, plans: h.plans }; }
+  const out = {};
+  if (plan.sty != null) { if (!STYK.includes(plan.sty)) return { error: 'bad_sty' }; out.sty = plan.sty; }
+  if (plan.risk != null) { const r = Number(plan.risk); if (!(r >= 1 && r <= 5)) return { error: 'bad_risk' }; out.risk = Math.round(r); }
+  if (plan.pull != null) out.pull = !!plan.pull;
+  h.plans[key] = out; h.lastSeen = now;
+  return { ok: true, plans: h.plans };
+}
+/** Звенья: {mode:'best'|'combo'|'keep'} — собрать автоматически; {lines} — вручную; {} — сбросить на авто. */
+export function setLines(G, S, uid, body, now = Date.now()) {
+  const o = S.online, e = Object.entries(o.humans).find(([, h]) => h && h.uid === uid);
+  if (!e) return { error: 'not_joined' };
+  const tid = +e[0], h = e[1];
+  G.S = S; G.HOOK.lines = {};
+  h.lastSeen = now;
+  if (body && body.mode) {
+    if (!LMODES.includes(body.mode)) return { error: 'bad_mode' };
+    const base = h.lines || null;
+    const L = JSON.parse(JSON.stringify(G.ev('buildLines')(tid, body.mode, base)));
+    delete L.info; h.lines = L; h.lmode = body.mode;
+  } else if (body && body.lines) {
+    const L = body.lines, mine = new Set(S.players.filter((p) => p.team === tid).map((p) => p.id));
+    const shape = Array.isArray(L.f) && L.f.length === 4 && L.f.every((l) => Array.isArray(l) && l.length === 3) &&
+      Array.isArray(L.d) && L.d.length === 3 && L.d.every((l) => Array.isArray(l) && l.length === 2) && Array.isArray(L.g) && L.g.length === 2;
+    if (!shape) return { error: 'bad_lines' };
+    const ids = [...L.f.flat(), ...L.d.flat(), ...L.g].filter((x) => x != null);
+    if (ids.some((x) => !mine.has(x)) || new Set(ids).size !== ids.length) return { error: 'bad_lines' };
+    h.lines = { f: L.f.map((l) => l.slice()), d: L.d.map((l) => l.slice()), g: L.g.slice() }; h.lmode = null;
+  } else { h.lines = null; h.lmode = null; }
+  return { ok: true, lines: linesFor(G, S, tid) };
 }

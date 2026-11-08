@@ -203,6 +203,24 @@ test('онлайн-сезон: создание, вход, расчёт, тра�
     r = await oapp.inject({ method: 'GET', url: '/api/online', headers: H });
     assert.equal(r.json().my.team, 3);
     assert.equal(r.json().teams[3].human.name, 'Тест');
+    // состав, план, звенья
+    r = await oapp.inject({ method: 'GET', url: '/api/online/team/3', headers: H });
+    const tv = r.json();
+    assert.ok(tv.mine && tv.players.length >= 20 && tv.players[0].pot != null && tv.lines.f.length === 4);
+    r = await oapp.inject({ method: 'GET', url: '/api/online/team/4', headers: H });
+    assert.ok(!r.json().mine && r.json().players[0].pot === undefined, 'чужой потенциал скрыт');
+    r = await oapp.inject({ method: 'POST', url: '/api/online/plan', headers: H, payload: { key: 'def', plan: { sty: 'FC', risk: 4, pull: false } } });
+    assert.equal(r.json().plans.def.sty, 'FC');
+    r = await oapp.inject({ method: 'POST', url: '/api/online/plan', headers: H, payload: { key: 'def', plan: { sty: 'XX' } } });
+    assert.equal(r.statusCode, 409);
+    r = await oapp.inject({ method: 'POST', url: '/api/online/lines', headers: H, payload: { mode: 'combo' } });
+    assert.ok(r.json().ok);
+    const Lc = r.json().lines; const sw = Lc.f[0][0]; Lc.f[0][0] = Lc.f[1][0]; Lc.f[1][0] = sw;
+    r = await oapp.inject({ method: 'POST', url: '/api/online/lines', headers: H, payload: { lines: Lc } });
+    assert.equal(r.json().lines.f[0][0], Lc.f[0][0]);
+    const bad = JSON.parse(JSON.stringify(Lc)); bad.f[0][1] = bad.f[0][0];
+    r = await oapp.inject({ method: 'POST', url: '/api/online/lines', headers: H, payload: { lines: bad } });
+    assert.equal(r.statusCode, 409, 'повтор игрока');
     // первый игровой слот
     const first = v.slots[0];
     assert.equal(await online.tick(first.t - 1000), 0, 'рано');
@@ -217,7 +235,7 @@ test('онлайн-сезон: создание, вход, расчёт, тра�
     assert.equal(vl.teams.reduce((s, t) => s + t.gp, 0), 0, 'таблица не раскрывает идущие матчи');
     // после окончания
     const fin = await online.game(gid, first.t + 11 * 60e3);
-    assert.ok(fin.done && fin.res && fin.box);
+    assert.ok(fin.done && fin.res && fin.box && fin.rost && fin.gk.length === 2);
     assert.equal(fin.ticks.length, fin.total);
     // весь сезон до чемпиона
     await online.tick(first.t + 365 * 864e5);
