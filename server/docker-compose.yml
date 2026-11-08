@@ -22,6 +22,9 @@ services:
       DATABASE_URL: postgres://gm:${DB_PASSWORD}@db:5432/gm
       PUBLIC_URL: https://${DOMAIN}
       GAME_URL: https://${DOMAIN}
+      GAME_HTML: /app/www/index.html
+    volumes:
+      - ./www:/app/www:ro
     depends_on:
       db:
         condition: service_healthy

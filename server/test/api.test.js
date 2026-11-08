@@ -7,6 +7,9 @@ import { makePool, migrate } from '../src/db.js';
 import { signInitData, verifyInitData, issueToken, readToken } from '../src/auth.js';
 import { linkTelegram } from '../src/link.js';
 import crypto from 'node:crypto';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { makeOnline } from '../src/online.js';
 
 const BOT = '123456:TEST_TOKEN';
 const cfg = { botToken: BOT, sessionSecret: 'test-secret', adminKey: 'admin-key', corsOrigins: 'https://game.example', rateLimit: 10000 };
@@ -18,7 +21,7 @@ const initFor = (id, extra = {}) =>
 
 before(async () => {
   pool = makePool(url);
-  await pool.query('DROP TABLE IF EXISTS link_codes, devices, events, saves, users, _migrations CASCADE');
+  await pool.query('DROP TABLE IF EXISTS online_games, online_seasons, link_codes, devices, events, saves, users, _migrations CASCADE');
   await migrate(pool, { info() {} });
   app = buildApp({ pool, cfg, logger: false });
   await app.ready();
@@ -167,4 +170,63 @@ test('приложение: вход по устройству и привязк
   // CORS для приложения
   r = await app.inject({ method: 'OPTIONS', url: '/api/save', headers: { origin: 'https://localhost' } });
   assert.equal(r.headers['access-control-allow-origin'], 'https://localhost');
+});
+
+test('онлайн-сезон: создание, вход, расчёт, трансляция', async () => {
+  const html = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../index.html');
+  const online = makeOnline(pool, html, { info() {}, error() {} });
+  await online.init();
+  const oapp = buildApp({ pool, cfg, logger: false, online });
+  await oapp.ready();
+  try {
+    let r = await oapp.inject({ method: 'GET', url: '/api/online' });
+    assert.equal(r.statusCode, 404, 'сезона ещё нет');
+    r = await oapp.inject({ method: 'POST', url: '/api/admin/online/create', payload: { fastSec: 60 } });
+    assert.equal(r.statusCode, 401);
+    r = await oapp.inject({ method: 'POST', url: '/api/admin/online/create', headers: { authorization: 'Bearer admin-key' }, payload: { fastSec: 60 } });
+    assert.equal(r.statusCode, 200, r.body);
+    assert.equal(r.json().slots, 28);
+    r = await oapp.inject({ method: 'GET', url: '/api/online' });
+    const v = r.json();
+    assert.equal(v.teams.length, 8);
+    assert.ok(v.canJoin);
+    // вход
+    const a = (await oapp.inject({ method: 'POST', url: '/api/auth', payload: { initData: initFor(900) } })).json();
+    const H = { authorization: 'Bearer ' + a.token };
+    r = await oapp.inject({ method: 'POST', url: '/api/online/join', headers: H, payload: { team: 3 } });
+    assert.equal(r.json().ok, true);
+    r = await oapp.inject({ method: 'POST', url: '/api/online/join', headers: H, payload: { team: 4 } });
+    assert.equal(r.statusCode, 409, 'второй клуб нельзя');
+    const b = (await oapp.inject({ method: 'POST', url: '/api/auth', payload: { initData: initFor(901) } })).json();
+    r = await oapp.inject({ method: 'POST', url: '/api/online/join', headers: { authorization: 'Bearer ' + b.token }, payload: { team: 3 } });
+    assert.equal(r.json().error, 'taken');
+    r = await oapp.inject({ method: 'GET', url: '/api/online', headers: H });
+    assert.equal(r.json().my.team, 3);
+    assert.equal(r.json().teams[3].human.name, 'Тест');
+    // первый игровой слот
+    const first = v.slots[0];
+    assert.equal(await online.tick(first.t - 1000), 0, 'рано');
+    const n = await online.tick(first.t + 1000);
+    assert.equal(n, 4, 'четыре матча в слоте');
+    const gid = first.games[0].id;
+    // идёт трансляция: результата нет, тиков меньше полного
+    const live = await online.game(gid, first.t + 60e3);
+    assert.ok(live.started && !live.done && live.res === null);
+    assert.ok(live.ticks.length > 0 && live.ticks.length < live.total);
+    const vl = online.view(null, first.t + 60e3);
+    assert.equal(vl.teams.reduce((s, t) => s + t.gp, 0), 0, 'таблица не раскрывает идущие матчи');
+    // после окончания
+    const fin = await online.game(gid, first.t + 11 * 60e3);
+    assert.ok(fin.done && fin.res && fin.box);
+    assert.equal(fin.ticks.length, fin.total);
+    // весь сезон до чемпиона
+    await online.tick(first.t + 365 * 864e5);
+    const end = online.view(null, first.t + 366 * 864e5);
+    assert.ok(end.champ != null, 'есть чемпион');
+    assert.equal(end.teams.reduce((s, t) => s + t.gp, 0), 8 * 28);
+    // перезапуск сервера поднимает сезон из базы
+    const again = makeOnline(pool, html, { info() {}, error() {} });
+    await again.init();
+    assert.equal(again.view(null, first.t + 366 * 864e5).champ, end.champ);
+  } finally { await oapp.close(); }
 });

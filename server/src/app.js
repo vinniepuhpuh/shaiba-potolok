@@ -20,7 +20,7 @@ function rateLimiter(perMin) {
   };
 }
 
-export function buildApp({ pool, cfg, logger = true }) {
+export function buildApp({ pool, cfg, logger = true, online = null }) {
   const app = Fastify({ logger, bodyLimit: MAX_SAVE, trustProxy: true });
   const allow = rateLimiter(cfg.rateLimit || 240);
   // https://localhost — так выглядит адрес игры внутри Android-приложения (Capacitor)
@@ -212,6 +212,48 @@ export function buildApp({ pool, cfg, logger = true }) {
   app.get('/admin', async (req, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store').header('X-Robots-Tag', 'noindex').send(adminHtml));
   const privacyHtml = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'admin', 'privacy.html'));
   app.get('/privacy', async (req, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'public, max-age=3600').send(privacyHtml));
+
+  // ---------- онлайн-сезон ----------
+  const softUid = (req) => {
+    const h = req.headers.authorization || '';
+    const p = readToken(h.startsWith('Bearer ') ? h.slice(7) : '', cfg.sessionSecret);
+    return p ? p.uid : null;
+  };
+  const adminOk = (req) => {
+    const h = req.headers.authorization || '', key = h.startsWith('Bearer ') ? h.slice(7) : '';
+    return !!cfg.adminKey && key.length === cfg.adminKey.length && crypto.timingSafeEqual(Buffer.from(key), Buffer.from(cfg.adminKey));
+  };
+  app.get('/api/online', async (req, reply) => {
+    if (!online || !online.active) return reply.code(404).send({ error: 'no_season' });
+    const uid = softUid(req);
+    if (uid) await online.touch(uid);
+    reply.header('Cache-Control', 'no-store');
+    return online.view(uid);
+  });
+  app.post('/api/online/join', { preHandler: auth }, async (req, reply) => {
+    if (!online || !online.active) return reply.code(404).send({ error: 'no_season' });
+    const team = Number(req.body?.team);
+    const u = (await pool.query('SELECT first_name, username FROM users WHERE id=$1', [req.uid])).rows[0] || {};
+    const r = await online.join(req.uid, u.first_name || u.username || 'Менеджер', team);
+    if (r.error) return reply.code(409).send(r);
+    return r;
+  });
+  app.get('/api/online/game/:gid', async (req, reply) => {
+    if (!online || !online.active) return reply.code(404).send({ error: 'no_season' });
+    const g = await online.game(String(req.params.gid));
+    if (!g) return reply.code(404).send({ error: 'no_game' });
+    reply.header('Cache-Control', 'no-store');
+    return g;
+  });
+  app.post('/api/admin/online/create', async (req, reply) => {
+    if (!adminOk(req)) return reply.code(401).send({ error: 'unauthorized' });
+    if (!online) return reply.code(503).send({ error: 'online_disabled' });
+    return online.create(req.body || {});
+  });
+  app.post('/api/admin/online/run', async (req, reply) => {
+    if (!adminOk(req)) return reply.code(401).send({ error: 'unauthorized' });
+    return { played: await online.tick() };
+  });
 
   // Вебхук бота: /bot/<BOT_WEBHOOK_PATH>
   if (cfg.botToken && cfg.webhookPath) {

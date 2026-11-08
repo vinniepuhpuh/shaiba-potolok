@@ -1,6 +1,8 @@
 import { buildApp } from './app.js';
 import { makePool, migrate } from './db.js';
 import { tg } from './bot.js';
+import { makeOnline } from './online.js';
+import fs from 'node:fs';
 
 const env = process.env;
 const need = (k) => {
@@ -34,7 +36,14 @@ for (let i = 0; ; i++) {
 }
 await migrate(pool);
 
-const app = buildApp({ pool, cfg });
+// Онлайн-сезон: движок берётся из той же сборки игры, что раздаёт сервер
+const gameHtml = env.GAME_HTML || '/app/www/index.html';
+let online = null;
+if (fs.existsSync(gameHtml)) {
+  try { online = makeOnline(pool, gameHtml, console); await online.init(); } catch (e) { console.error('онлайн-режим не запустился:', e); online = null; }
+} else console.warn(`онлайн-режим выключен: нет ${gameHtml}`);
+const app = buildApp({ pool, cfg, online });
+if (online) setInterval(() => online.tick().catch((e) => app.log.error({ err: e }, 'online tick failed')), 5000).unref();
 await app.listen({ host: '0.0.0.0', port: Number(env.PORT || 3000) });
 
 // Регистрируем вебхук бота, если задан публичный адрес
