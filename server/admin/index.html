@@ -159,11 +159,30 @@ function render(s){
     <div class="card"><h2>Где сейчас игроки</h2><div class="sub">Текущий сезон в облачных сохранениях</div>${hbars(seasons)}</div>
     <div class="card"><h2>События за 7 дней</h2><div class="sub">Сколько раз произошло</div>
       ${ev.length?`<table><tr><th>Событие</th><th>Раз</th></tr>${ev.map(e=>`<tr><td>${esc(EVN[e.type]||e.type)}</td><td>${fmt(e.n)}</td></tr>`).join('')}</table>`:'<p class="empty">Пока нет данных.</p>'}</div>
-  </div>`;
+  </div>
+  <div class="card" style="margin-top:14px"><h2>Онлайн-сезон</h2><div class="sub" id="onst">Загружаю…</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+      <button id="onfast">Быстрый тест: матч каждые 2 мин</button>
+      <button id="onreal">Тестовый сезон по расписанию (с завтра, 19:00–20:30 МСК)</button>
+      <button id="onrun">Досчитать наступившие матчи</button>
+    </div><p class="sub" id="onmsg"></p></div>`;
+  onlineInfo();
+  const onPost=async(url,body,ask)=>{if(ask&&!confirm(ask))return;$('#onmsg').textContent='…';
+    try{const r=await fetch(url,{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify(body||{})});const j=await r.json();
+      $('#onmsg').textContent=r.ok?(j.slots?`Создан сезон №${j.id}: ${j.slots} игровых слотов регулярки, первый — ${new Date(j.first).toLocaleString('ru-RU')}`:`Посчитано матчей: ${j.played}`):('Ошибка: '+(j.error||r.status));onlineInfo();}
+    catch(e){$('#onmsg').textContent='Нет связи с сервером.';}};
+  $('#onfast').onclick=()=>onPost('/api/admin/online/create',{fastSec:120,liveMin:2,name:'Быстрый тест'},'Текущий онлайн-сезон будет заменён новым. Продолжить?');
+  $('#onreal').onclick=()=>onPost('/api/admin/online/create',{},'Текущий онлайн-сезон будет заменён новым. Продолжить?');
+  $('#onrun').onclick=()=>onPost('/api/admin/online/run');
   const draw=()=>lineChart($('#ln'),days,[{n:'Играли',v:dau,c:'var(--s1)'},{n:'Новые',v:nw,c:'var(--s2)'}]);
   draw();window.onresize=()=>{clearTimeout(window._rt);window._rt=setTimeout(draw,150);};
   $('#rf').onclick=load;$('#lo').onclick=()=>{try{localStorage.removeItem(K);}catch(e){}key=null;login();};
 }
+async function onlineInfo(){const el=$('#onst');if(!el)return;
+  try{const r=await fetch('/api/online',{cache:'no-store'});if(r.status===404){el.textContent='Сезона нет.';return;}const v=await r.json();
+    const all=v.slots.flatMap(s=>s.games),done=all.filter(g=>g.res).length,hum=v.teams.filter(t=>t.human);
+    el.textContent=`«${v.name}» (№${v.id}): сыграно ${done} из ${all.length} матчей · людей: ${hum.length}${hum.length?' ('+hum.map(t=>t.name+' — '+t.human.name).join(', ')+')':''} · вход ${v.canJoin?'открыт до '+new Date(v.deadlineT).toLocaleString('ru-RU'):'закрыт'}${v.champ!=null?' · чемпион: '+v.teams[v.champ].name:''}`;}
+  catch(e){el.textContent='Не удалось получить данные.';}}
 load();
 </script>
 </body>
