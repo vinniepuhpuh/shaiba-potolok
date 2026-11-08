@@ -3,3 +3,4 @@ node_modules/
 backups/
 www/
 .caddy.sha
+.game.sha
