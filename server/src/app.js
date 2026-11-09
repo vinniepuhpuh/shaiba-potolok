@@ -265,6 +265,23 @@ export function buildApp({ pool, cfg, logger = true, online = null }) {
     if (r.error) return reply.code(409).send(r);
     return r;
   });
+  app.get('/api/online/market', async (req, reply) => {
+    if (!online || !online.active) return reply.code(404).send({ error: 'no_season' });
+    reply.header('Cache-Control', 'no-store');
+    return online.market(softUid(req));
+  });
+  app.post('/api/online/trade/eval', { preHandler: auth }, async (req, reply) => {
+    if (!online || !online.active) return reply.code(404).send({ error: 'no_season' });
+    return online.tradeEval(req.uid, req.body || {});
+  });
+  for (const [path, fn] of [['sign', 'sign'], ['scout', 'scout'], ['os-sign', 'osSign'], ['release', 'release'], ['trade', 'trade'], ['trade/answer', 'answer']]) {
+    app.post('/api/online/' + path, { preHandler: auth }, async (req, reply) => {
+      if (!online || !online.active) return reply.code(404).send({ error: 'no_season' });
+      const r = await online[fn](req.uid, req.body || {});
+      if (r && r.error) return reply.code(409).send(r);
+      return r;
+    });
+  }
   app.post('/api/admin/online/create', async (req, reply) => {
     if (!adminOk(req)) return reply.code(401).send({ error: 'unauthorized' });
     if (!online) return reply.code(503).send({ error: 'online_disabled' });

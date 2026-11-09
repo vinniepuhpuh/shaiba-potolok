@@ -71,6 +71,14 @@
 .macc{margin-top:14px}.macc .btn-row{margin-top:10px}
 .btn .dot,.mmode .dot{position:static;display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--red);vertical-align:middle}
 a.btn{text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
+.cap-bar.o{height:8px;border-radius:99px;background:var(--sunk);display:flex;overflow:hidden}
+.cap-lbl.o{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px;font-size:13px;color:var(--ink)}
+.cap-lbl.o b{font-family:var(--fm);color:var(--ink)}
+.osrow{display:grid;grid-template-columns:34px 1fr auto auto;align-items:center;gap:6px 10px;border-top:1px solid var(--line);padding:9px 0}
+.osrow .btn{grid-column:1/-1}
+.tro{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding:10px 0}
+.tro:first-of-type{border-top:0}
+.trbar{position:sticky;bottom:calc(64px + env(safe-area-inset-bottom,0px));z-index:3}
 </style>
 <style>
 /* Layout: one-column phone app. Scoreboard header on top, scrolling content, tab bar pinned to the bottom. */
@@ -1936,6 +1944,7 @@ function load(){try{const s=localStorage.getItem(KEY);if(s){const o=JSON.parse(s
 
 /* ---------- changelog ---------- */
 const CHANGES=[
+  {v:'2026-11-09c',d:'9 ноября',t:'Рынок в онлайн-лиге',items:['В онлайн-лиге появилась вкладка «Рынок».','Свободные агенты общие на всю лигу: кто первым договорился, того и игрок.','«За рубежом» — личный список: раз в день скаут привозит трёх игроков, которых видите только вы.','Обмены: компьютерные клубы отвечают сразу и соглашаются, если обмен выгоден им на 15–20%. Живым менеджерам предложение уходит на 48 часов — принять или отклонить можно во вкладке «Рынок».','Контракт своего игрока можно расторгнуть в «Состав» → «Игроки»: половина зарплаты остаётся под потолком до конца сезона.']},
   {v:'2026-11-09b',d:'9 ноября',t:'Живые звуки арены',items:['Гол теперь звучит как на стадионе: сирена и рёв трибун.','Настоящий щелчок клюшки при броске, «ох» трибун при штанге и ликование после победы.','Во время трансляции — гул арены вместо музыки. Выключается в меню «⋯» → «Шум трибун».']},
   {v:'2026-11-09a',d:'9 ноября',t:'Главное меню',items:['При запуске открывается главное меню: ваш аккаунт и состояние облака, выбор режима — карьера или онлайн-лига.','На карточках режимов видно главное: клуб и день сезона в карьере, место и следующий матч в онлайн-лиге.','Вернуться в меню из игры — кнопка с домиком вверху или «Назад».']},
   {v:'2026-11-08a',d:'8 ноября',t:'Онлайн-лига',items:['Новый режим — онлайн-лига, где клубы ведут живые люди.','Онлайн-сезон: 8 клубов, по 4 матча с каждым соперником, все выходят в плей-офф. Матчи идут каждый вечер по расписанию.','Матчи можно смотреть в прямой трансляции, а потом в записи и протоколе. Результат открывается только в конце трансляции.','Тактику и звенья задаёте заранее: план по умолчанию и отдельный план на любой матч.','Короткое обучение по онлайн-лиге при первом входе. Пройти снова — в меню «⋯».','Первый, тестовый сезон стартует скоро — дату объявим в канале.']},
@@ -3402,7 +3411,7 @@ function viewLeague(){
 }
 /* ---------- онлайн-лига ---------- */
 const oEsc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const OL={v:null,err:null,loading:false,at:0,skew:0,team:{},tab:'home',gm:null,sel:null,planK:'def',past:false,mine:false,busy:false};
+const OL={ms:'fa',mk:null,tr:null,offer:null,confirm:null,v:null,err:null,loading:false,at:0,skew:0,team:{},tab:'home',gm:null,sel:null,planK:'def',past:false,mine:false,busy:false};
 const OS={teams:[],players:[],chem:{},box:[],user:null};
 function withOS(fn){const s0=S;S=OS;try{return fn();}finally{S=s0;}}
 const PROFN={young:'Молодая',mixed:'Смешанная',vet:'Опытная'};
@@ -3427,7 +3436,7 @@ async function oPost(path,body){
   let r=await apiF(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})},10000);
   if(r.status===401){CL.token=null;if(await oAuth())r=await apiF(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})},10000);}
   const j=await r.json().catch(()=>({}));
-  if(!r.ok){toast(OERR[j.error]||'Не получилось, попробуйте ещё раз.');return null;}
+  if(!r.ok){toast((j.issues&&j.issues[0])||OERR[j.error]||'Не получилось, попробуйте ещё раз.');return null;}
   return j;
 }
 const OERR={deadline:'Вход в сезон уже закрыт.',taken:'Этот клуб уже занят другим менеджером.',already:'Вы уже управляете клубом в этом сезоне.',started:'Матч уже начался: план не поменять.',not_joined:'Сначала выберите клуб.',bad_lines:'Звенья не сохранились: проверьте состав.',no_season:'Сезона сейчас нет.'};
@@ -3440,6 +3449,7 @@ async function oLoad(quiet){
     if(v){OL.skew=v.now-(t0+Date.now())/2;OL.v=v;OL.err=null;OS.teams=v.teams;if(!oTourSeen()&&!U.tour&&U.mode==='online'&&!OL.gm)oTourStart();}else{OL.v=null;OL.err='none';}
     OL.at=Date.now();
     const my=oMy();if(my!=null&&(!OL.team[my]||quiet!=='keep'))await oTeam(my);
+    if(my!=null||OL.tab==='market')try{const m=await oGet('/api/online/market');if(m)OL.mk=m;}catch(e){}
   }catch(e){if(!OL.v)OL.err='net';}
   finally{OL.loading=false;}
   if(U.mode!=='career')render();
@@ -3465,8 +3475,8 @@ function oHeader(){
   return `<header class="top gut"><div class="top-row">${t?badge(t,44):'<span class="obig">🏒</span>'}<div class="top-name"><h1>${t?`${t.city} ${t.name}`:'Онлайн-лига'}</h1><small>${sub}</small></div><button class="icon-btn" data-tut="o-mode" data-a="mGo" data-id="menu" aria-label="Главное меню">${HOME_IC}</button><button class="icon-btn" data-a="menu" aria-label="Меню">${ICON.menu}</button></div></header>`;
 }
 function oTabs(){
-  const L=[['home','Сезон','club'],['games','Матчи','league'],['table','Таблица','fin'],['roster','Состав','roster']];
-  return `<div class="tabs"><nav>${L.map(([k,n,ic])=>`<button data-a="oTab" data-id="${k}" ${OL.tab===k?'aria-current="page"':''}>${ICON[ic]}${n}</button>`).join('')}</nav></div>`;
+  const L=[['home','Сезон','club'],['games','Матчи','league'],['table','Таблица','fin'],['roster','Состав','roster'],['market','Рынок','market']];
+  return `<div class="tabs"><nav>${L.map(([k,n,ic])=>`<button data-a="oTab" data-id="${k}" ${OL.tab===k?'aria-current="page"':''}>${ICON[ic]}${n}${k==='market'&&oIncoming()&&OL.tab!=='market'?'<i class="dot"></i>':''}</button>`).join('')}</nav></div>`;
 }
 function oEmpty(){
   if(OL.err==='nosrv')return `<section class="card"><h2>Онлайн-лига</h2><p>Онлайн-лига работает в Telegram (бот @hmrurubot), на сайте gmhockey.ru и в приложении.</p></section>`;
@@ -3595,7 +3605,7 @@ function oViewRoster(){
 }
 function oListCard(tv){
   const gr=[['F','Нападающие'],['D','Защитники'],['G','Вратари']];
-  return gr.map(([g,n])=>{const ps=tv.players.filter(p=>grpOf(p)===g).sort(byOvr);return `<section class="card"><h2>${n}<span>${ps.length}</span></h2><div class="list">${ps.map(p=>oPRow(p)).join('')}</div></section>`;}).join('')+
+  return gr.map(([g,n])=>{const ps=tv.players.filter(p=>grpOf(p)===g).sort(byOvr);return `<section class="card"><h2>${n}<span>${ps.length}</span></h2><div class="list">${ps.map(p=>oPRow(p,'oPl')).join('')}</div></section>`;}).join('')+
   `<p class="small muted">Рост игроков в онлайн-сезоне идёт после каждого матча регулярки: чем больше игрок на льду, тем быстрее. Цифра рядом с возрастом — изменение рейтинга с начала сезона.</p>`;
 }
 function oSheetTeam(id){
@@ -3695,11 +3705,11 @@ function renderOnline(){
   const app=document.getElementById('app');
   let main;
   if(!OL.v)main=oEmpty();
-  else main={home:oViewHome,games:oViewGames,table:oViewTable,roster:oViewRoster}[OL.tab]();
+  else main={home:oViewHome,games:oViewGames,table:oViewTable,roster:oViewRoster,market:oViewMarket}[OL.tab]();
   let html=oHeader()+`<main class="gut">${main}</main>`+(OL.v?oTabs():'');
   if(U.sheet){
     const s=U.sheet;let inner='';
-    if(s.type==='oteam')inner=oSheetTeam(s.id);else if(s.type==='ojoin')inner=oSheetJoin(s.id);else if(s.type==='menu')inner=sheetMenu();else if(s.type==='wn')inner=sheetWhatsNew();else if(s.type==='help')inner=sheetHelp();else if(s.type==='cloud')inner=sheetCloud();else if(s.type==='code')inner=sheetCode();
+    if(s.type==='oteam')inner=oSheetTeam(s.id);else if(s.type==='ooffer')inner=oSheetOffer();else if(s.type==='opl')inner=oSheetPl(s.id);else if(s.type==='ojoin')inner=oSheetJoin(s.id);else if(s.type==='menu')inner=sheetMenu();else if(s.type==='wn')inner=sheetWhatsNew();else if(s.type==='help')inner=sheetHelp();else if(s.type==='cloud')inner=sheetCloud();else if(s.type==='code')inner=sheetCode();
     html+=`<div class="veil" data-a="veil"><div class="sheet gut" role="dialog" aria-modal="true"><div class="grab"></div>${inner}</div></div>`;
   }
   const mvOn=!!(OL.gm&&OL.v);
@@ -3707,7 +3717,9 @@ function renderOnline(){
   if(U.toast)html+=`<div class="toast" role="status">${U.toast}</div>`;
   html+=tourHTML();
   const mvEl=document.getElementById('mv'),my=mvEl?mvEl.scrollTop:0,y=window.scrollY;
+  const shEl=document.querySelector('.sheet'),shy=shEl?shEl.scrollTop:0;
   app.innerHTML=html;window.scrollTo(0,y);
+  const sh2=document.querySelector('.sheet');if(sh2&&U.keepSheet)sh2.scrollTop=shy;U.keepSheet=false;
   const mv2=document.getElementById('mv');if(mv2)mv2.scrollTop=my;
   document.body.style.overflow=mvOn?'hidden':'';
   if(mvOn&&OL.gm.mode!=='menu'&&OL.gm.mode!=='box'){aniStart();withOS(()=>dotLabels(OL.gm.L));}
@@ -3721,6 +3733,7 @@ const OTOUR=[
   {tab:'games',t:'o-games',title:'Расписание и трансляции',text:'Матчи каждый вечер в одно и то же время. Во время матча горит LIVE: нажмите — откроется прямая трансляция. Счёт держится в секрете до её конца, даже в таблице. Потом матч можно посмотреть в записи или открыть протокол.'},
   {tab:'roster',rs:'plan',t:'o-plan',title:'План на матч',text:'Во время матча вы не можете вмешаться, поэтому тактику задают заранее. «По умолчанию» действует на все игры, а на любой ближайший матч можно поставить свой план — например, стиль, который бьёт любимый стиль соперника. «Авто» — решает компьютер.'},
   {tab:'roster',rs:'lines',t:'o-lines',title:'Звенья',text:'Соберите звенья кнопками или вручную: нажмите на игрока, затем на место. Если кто-то травмируется, сервер сам поставит замену.'},
+  {tab:'market',t:'o-market',title:'Рынок',text:'Свободные агенты — общие на всю лигу: кто первым договорился, того и игрок. «За рубежом» — личный список: раз в день скаут привозит трёх игроков, которых видите только вы. Обмены с компьютером проходят, если им выгодно на 15–20%, а живому менеджеру предложение уходит на 48 часов.'},
   {tab:'table',t:'o-table',title:'Таблица и плей-офф',text:'После регулярки все 8 клубов выходят в плей-офф: 1-е место играет с 8-м, 2-е с 7-м. Серии до 4 побед, после каждого круга пересев.'},
   {title:'Рост и активность',text:'Игроки растут после каждого матча регулярки: чем больше времени на льду, тем быстрее. В плей-офф роста нет.\nЕсли не заходить в игру 7 дней, клуб перейдёт компьютеру.\nОбучение можно пройти снова в меню «⋯».',last:true,btn:'Понятно'}
 ];
@@ -3739,7 +3752,7 @@ const OACT={
   oTPrev(){oTourGo(U.tour.i-1);},
   oTSkip(){track('otour_skip',{i:U.tour?U.tour.i:0});U.tour=null;try{localStorage.setItem('gm-otour','1');}catch(e){}render();},
   oMode(id){const on=id==='online';stopTimer();oModeSet(on);U.sheet=null;window.scrollTo(0,0);if(on){oPollStart();oLoad();}else{oStop();OL.gm=null;}render();},
-  oTab(id){OL.tab=id;OL.sel=null;window.scrollTo(0,0);render();if(id==='roster'&&oMy()!=null)oTeam(oMy()).then(()=>render());},
+  oTab(id){OL.tab=id;OL.sel=null;window.scrollTo(0,0);render();if((id==='roster'||id==='market')&&oMy()!=null)oTeam(oMy()).then(()=>render());if(id==='market')oMk();},
   oReload(){OL.err=null;render();oLoad();},
   oPick(id){U.sheet={type:'ojoin',id:+id};render();},
   async oJoin(id){U.sheet=null;render();const r=await oPost('/api/online/join',{team:+id});if(r){toast(`Вы — генменеджер «${oT(+id).name}»!`);track('online_join');await oLoad();OL.tab='home';render();}},
@@ -3763,6 +3776,133 @@ const OACT={
   oBench(id){const k='b|'+id;if(OL.sel&&!OL.sel.startsWith('b|'))oSlotTap(k);else{OL.sel=OL.sel===k?null:k;render();}},
   oAuto(id){OL.sel=null;oLinesSend(id?{mode:id}:{});toast(id?'Звенья собраны.':'Звенья будет собирать компьютер.');},
 };
+
+/* ---------- онлайн-рынок ---------- */
+const OPOTH={high:'большой потенциал',mid:'перспективный'};
+async function oMk(){try{const m=await oGet('/api/online/market');if(m)OL.mk=m;}catch(e){}if(U.mode==='online')render();}
+const oRs=x=>{const m=OL.mk;return Math.min(m?m.maxSal:99999,Math.max(m?m.minSal:0,Math.round(x/100)*100));};
+function oChance(p,sal,yrs){const t=termAdj(p,yrs),req=Math.round(p.ask*t.f/100)*100;return Math.max(0,Math.min(1,(sal/req-.84-t.pen)/.18));}
+const oIncoming=()=>{const m=OL.mk,my=oMy();return m&&m.my?m.my.trades.filter(t=>t.status==='open'&&t.to===my).length:0;};
+function oCapBar(){
+  const m=OL.mk.my;if(!m)return '';const room=m.cap-m.pay;
+  return `<section class="card"><div class="cap-bar o"><i style="width:${Math.min(1,(m.pay-m.dead)/m.cap)*100}%;background:var(--ink)"></i><i style="width:${Math.min(1,m.dead/m.cap)*100}%;background:var(--red)"></i></div>
+  <div class="cap-lbl o"><span>Зарплаты <b>${money(m.pay)}</b> / ${money(m.cap)}</span><span>Свободно <b style="${room<0?'color:var(--red)':''}">${money(room)}</b></span><span>Игроков <b>${m.n}</b> / ${OL.mk.maxRoster}</span></div>
+  ${m.dead?`<p class="small muted">Из них ${money(m.dead)} — половина зарплат расторгнутых игроков, до конца сезона.</p>`:''}</section>`;
+}
+function oFARow(p){
+  const pat=p.pat!=null&&p.pat<100?` · терпение ${p.pat}`:'';
+  return `<button class="prow" data-a="oOffer" data-id="${p.id}" ${p.pat===0?'disabled':''}>${posB(p)}<span class="pn"><b>${nm(p)}</b><small>${p.age} л · ${flag(p.nat)}${p.role?' · '+ROLE_S[p.role]:''}${p.potH?' · <span class="ok">'+OPOTH[p.potH]+'</span>':''}${pat}${p.pat===0?' · не ведёт переговоры':''}</small></span><span class="ovr ${tier(p.ovr)}">${p.ovr}</span><span class="money"><b>${money(p.ask)}</b><small>просит · ${p.askY} ${yw(p.askY)}</small></span></button>`;
+}
+function oViewMarket(){
+  const v=OL.v,my=oMy(),m=OL.mk;
+  if(my==null)return `<section class="card"><h2>Рынок</h2><p>${v.canJoin?'Сначала выберите клуб на вкладке «Сезон».':'В этом сезоне у вас нет клуба.'}</p></section>`+(m?oLogCard():'');
+  if(!m||!m.my)return `<section class="card"><p class="muted">Загружаю рынок…</p></section>`;
+  const inc=oIncoming();
+  const seg=`<div class="seg"><button data-a="oMS" data-id="fa" aria-pressed="${OL.ms==='fa'}">Агенты</button><button data-a="oMS" data-id="os" aria-pressed="${OL.ms==='os'}">За рубежом</button><button data-a="oMS" data-id="tr" aria-pressed="${OL.ms==='tr'}">Обмены${inc?' <i class="dot"></i>':''}</button></div>`;
+  const closed=(k,txt)=>!m.open[k]?`<section class="card hl"><p class="small">${txt}</p></section>`:'';
+  let body='';
+  if(OL.ms==='os'){
+    const os=m.my.os;
+    body=closed('fa','Рынок закрыт до конца сезона.')+`<section class="card"><h2>Личный список<span>только для вас</span></h2>
+    <p class="small muted">Раз в день скаут привозит трёх игроков из зарубежных лиг. Их видите только вы, контракт фиксированный и подписывается сразу. Подписали одного — остальные уезжают. Новый поиск заменяет старый список.</p>
+    ${m.open.fa?`<button class="btn ${os.length?'':'pri'}" data-a="oScout" ${m.my.osToday?'disabled':''}>${m.my.osToday?'Скаут уже съездил сегодня — следующий поиск завтра':'Отправить скаута'}</button>`:''}</section>
+    ${os.length?`<section class="card"><div class="list">${os.map(p=>`<div class="osrow">${posB(p)}<span class="pn"><b>${nm(p)}</b><small>${p.age} л · ${flag(p.nat)} ${NAT_FULL[p.nat]||''}${p.role?' · '+ROLE_S[p.role]:''}${p.potH?' · <span class="ok">'+OPOTH[p.potH]+'</span>':''}</small></span><span class="ovr ${tier(p.ovr)}">${p.ovr}</span><span class="money"><b>${money(p.osSal)}</b><small>${p.osY} ${yw(p.osY)}</small></span><button class="btn sm pri" data-a="oOsSign" data-id="${p.id}" ${m.open.fa?'':'disabled'}>Подписать</button></div>`).join('')}</div></section>`:''}`;
+  }else if(OL.ms==='tr')body=closed('trade',`Обмены закрыты: дедлайн прошёл ${oWhen(m.tradeT)}.`)+oTradeView();
+  else{
+    const g=OL.mf||'all',fl=m.fa.filter(p=>g==='all'||grpOf(p)===g);
+    body=closed('fa','Рынок закрыт до конца сезона.')+`<div class="chips">${[['all','Все'],['F','Нападающие'],['D','Защитники'],['G','Вратари']].map(([k,n])=>`<button class="chip" data-a="oMF" data-id="${k}" aria-pressed="${g===k}">${n}</button>`).join('')}</div>
+    <section class="card"><h2>Свободные агенты<span>${fl.length}</span></h2><p class="small muted">Общий рынок: кто первым договорился, того и игрок. Компьютерные клубы тоже подписывают агентов, когда им не хватает людей.</p><div class="list">${fl.map(oFARow).join('')||'<p class="muted">Никого нет.</p>'}</div></section>`;
+  }
+  return `<div data-tut="o-market">`+oCapBar()+`</div>`+`<p class="small muted">Обмены — до ${oWhen(m.tradeT)}, агенты и зарубежье — до конца регулярки.</p>`+seg+body+oLogCard();
+}
+function oLogCard(){const m=OL.mk;if(!m||!m.log.length)return '';return `<section class="card"><h2>Сделки в лиге</h2><ul class="feed">${m.log.slice(0,10).map(e=>`<li><span>${oDayLbl(e.t).replace(/^(\S+).*/,'$1')} ${oHM(e.t)}</span><div>${oEsc(e.txt)}</div></li>`).join('')}</ul></section>`;}
+/* предложение агенту */
+function oSheetOffer(){
+  const o=OL.offer,p=OL.mk&&OL.mk.fa.find(x=>x.id===o.id);if(!p)return '<p class="muted">Игрок уже подписан.</p><button class="btn" data-a="close">Закрыть</button>';
+  const m=OL.mk.my,c=oChance(p,o.sal,o.yrs),room=m.cap-m.pay;
+  return `<div class="stack"><div class="orow">${posB(p)}<div><b>${p.f} ${p.l}</b><small>${p.age} л · ${NAT_FULL[p.nat]||''} · рейтинг ${p.ovr}${p.role?' · '+ROLES[p.role]:''}</small></div></div>
+  <p class="small">Просит <b>${money(p.ask)}</b> на ${p.askY} ${yw(p.askY)}. Терпение ${p.pat}: каждый отказ его снижает, на нуле переговоры с вами закрыты.</p>
+  <div class="kv"><div><small>Зарплата</small><b>${money(o.sal)}</b></div><div><small>Шанс согласия</small><b class="${c>=.7?'ok':c<.3?'bad':''}">${Math.round(c*100)}%</b></div><div><small>Останется под потолком</small><b class="${room-o.sal<0?'bad':''}">${money(room-o.sal)}</b></div></div>
+  <div class="btn-row"><button class="btn sm" data-a="oSal" data-id="-500">−500</button><button class="btn sm" data-a="oSal" data-id="-100">−100</button><button class="btn sm" data-a="oSal" data-id="100">+100</button><button class="btn sm" data-a="oSal" data-id="500">+500</button></div>
+  <small class="muted">Срок контракта</small><div class="seg five">${[1,2,3,4,5].map(y=>`<button data-a="oYrs" data-id="${y}" aria-pressed="${o.yrs===y}">${y} ${yw(y)}</button>`).join('')}</div>
+  <p class="small muted">В онлайн-сезоне срок влияет только на согласие: молодые хотят длинный контракт, ветераны — короткий.</p>
+  <button class="btn pri" data-a="oSign" ${room-o.sal<0||OL.busy?'disabled':''}>Предложить контракт</button><button class="btn" data-a="close">Отмена</button></div>`;
+}
+/* обмены */
+function oTradeView(){
+  const m=OL.mk,my=oMy(),tr=OL.tr||(OL.tr={to:null,give:[],get:[],ev:null});
+  const trs=m.my.trades,inc=trs.filter(t=>t.status==='open'&&t.to===my),out=trs.filter(t=>t.status==='open'&&t.from===my),old=trs.filter(t=>t.status!=='open').slice(0,5);
+  const tline=(t)=>{const a=oT(t.from),b=oT(t.to);return `<p class="small"><b>${t.from===my?'Вы':a.name}</b> отдают: ${t.give.map(x=>`${x.n} (${x.ovr})`).join(', ')||'ничего'}<br><b>${t.to===my?'Вы':b.name}</b> отдают: ${t.get.map(x=>`${x.n} (${x.ovr})`).join(', ')||'ничего'}</p>`;};
+  const SN={accepted:'принят',declined:'отклонён',cancelled:'отозван',expired:'истёк',void:'отменён'};
+  let html='';
+  if(inc.length)html+=`<section class="card hl"><h2>Вам предлагают<span>${inc.length}</span></h2>${inc.map(t=>`<div class="tro"><div class="orow">${tl(oT(t.from),22)}<b>${oT(t.from).city} ${oT(t.from).name}</b></div>${tline(t)}<small class="muted">Действует до ${oWhen(t.exp)}</small><div class="btn-row"><button class="btn sm" data-a="oTA" data-id="${t.id}|decline">Отклонить</button><button class="btn sm pri" data-a="oTA" data-id="${t.id}|accept">Принять</button></div></div>`).join('')}</section>`;
+  if(out.length)html+=`<section class="card"><h2>Ваши предложения<span>${out.length}</span></h2>${out.map(t=>`<div class="tro"><div class="orow">${tl(oT(t.to),22)}<b>${oT(t.to).city} ${oT(t.to).name}</b></div>${tline(t)}<small class="muted">Ждёт ответа до ${oWhen(t.exp)}</small><button class="btn sm" data-a="oTA" data-id="${t.id}|cancel">Отозвать</button></div>`).join('')}</section>`;
+  if(!m.open.trade)return html;
+  const others=OL.v.teams.filter(t=>t.id!==my);
+  html+=`<section class="card"><h2>Новый обмен</h2><p class="small muted">Компьютерные клубы отвечают сразу и соглашаются, только если обмен выгоден им примерно на 15–20%. Живому менеджеру предложение уходит на 48 часов.</p>
+  <div class="chips">${others.map(t=>`<button class="chip" data-a="oTT" data-id="${t.id}" aria-pressed="${tr.to===t.id}">${tl(t,16)} ${t.name}${t.human?' 👤':''}</button>`).join('')}</div></section>`;
+  if(tr.to==null)return html;
+  const A=OL.team[my],B=OL.team[tr.to];
+  if(!A||!B)return html+`<section class="card"><p class="muted">Загружаю составы…</p></section>`;
+  const row=(p,side)=>{const on=tr[side].includes(p.id);return `<button class="prow o3${on?' sel':''}" data-a="oTP" data-id="${side}|${p.id}"><span class="tick">${on?'✓':''}</span><span class="pn"><b>${posT(p)} · ${nm(p)}</b><small>${p.age} л · ${money(p.sal)}${p.inj?' · травма':''}</small></span><span class="ovr ${tier(p.ovr)}">${p.ovr}</span></button>`;};
+  const list=(ps,side)=>ps.filter(p=>p.yrs>0).sort(byOvr).map(p=>row(p,side)).join('');
+  const e=tr.ev,t=oT(tr.to);
+  let verdict='';
+  if(tr.give.length||tr.get.length){
+    if(!e)verdict='<p class="small muted">Считаю…</p>';
+    else if(e.issues&&e.issues.length)verdict=`<p class="small bad">${e.issues.map(oEsc).join('<br>')}</p>`;
+    else if(e.human)verdict=`<p class="small">Предложение уйдёт менеджеру «${t.name}»${t.human?' ('+oEsc(t.human.name)+')':''}.</p>`;
+    else verdict=`<div class="meter"><small>Интерес «${t.name}»<b>${Math.round(e.pct*100)}%</b></small><div class="bar ${e.deal?'good':''}"><i style="width:${e.pct*100}%"></i></div></div><p class="small ${e.deal?'ok':'muted'}">${e.deal?'Они готовы согласиться.':e.pct>.35?'Почти: добавьте что-нибудь или попросите меньше.':'Им это неинтересно.'}</p>`;
+  }
+  html+=`<section class="card"><h2>Вы отдаёте<span>${tr.give.length}</span></h2><div class="list">${list(A.players,'give')}</div></section>
+  <section class="card"><h2>Вы получаете из «${t.name}»<span>${tr.get.length}</span></h2><div class="list">${list(B.players,'get')}</div></section>
+  <section class="card trbar">${verdict}<button class="btn pri" data-a="oTSend" ${!e||(e.issues&&e.issues.length)||(!e.human&&!e.deal)||OL.busy?'disabled':''}>${e&&e.human?'Отправить предложение':'Предложить обмен'}</button></section>`;
+  return html;
+}
+let _oTE=null;
+function oTradeEval(){
+  const tr=OL.tr;tr.ev=null;clearTimeout(_oTE);
+  if(!tr.give.length&&!tr.get.length){render();return;}
+  render();
+  _oTE=setTimeout(async()=>{if(!(await oAuth()))return;try{const r=await apiF('/api/online/trade/eval',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:tr.to,give:tr.give,get:tr.get})},8000);if(r.ok&&OL.tr===tr){tr.ev=await r.json();render();}}catch(e){}},250);
+}
+/* свой игрок: расторжение */
+function oSheetPl(id){
+  const tv=OL.team[oMy()],p=tv&&tv.players.find(x=>x.id===id);if(!p)return '<button class="btn" data-a="close">Закрыть</button>';
+  const dead=Math.round(p.sal*.5/100)*100;
+  return `<div class="stack"><div class="orow">${posB(p)}<div><b>${p.f} ${p.l}</b><small>${p.age} л · ${NAT_FULL[p.nat]||''} · рейтинг ${p.ovr}${p.pot!=null&&p.pot>p.ovr?' · потенциал '+p.pot:''}${p.role?' · '+ROLES[p.role]:''}</small><small>${money(p.sal)} · ${p.gp?`${p.gp} и, ${p.pos==='G'?'':p.g+'+'+p.a}`:'ещё не играл'}${p.d?` · с начала сезона ${p.d>0?'+':''}${p.d}`:''}</small></div></div>
+  ${OL.confirm==='rel'+id?`<p class="warn">Игрок уйдёт в свободные агенты. ${money(dead)} останется под потолком до конца сезона. Расторгнуть?</p><button class="btn pri" data-a="oRel" data-id="${id}">Да, расторгнуть</button>`:`<button class="btn" data-a="oRelAsk" data-id="${id}">Расторгнуть контракт</button>`}
+  <button class="btn" data-a="close">Закрыть</button></div>`;
+}
+const OMERR={market_closed:'Рынок закрыт.',gone:'Игрока уже нет на рынке.',roster_full:'Состав полный: 26 игроков.',cap:'Контракт не помещается под потолок.',no_talks:'Игрок больше не ведёт с вами переговоры.',bad_offer:'Проверьте сумму и срок.',os_today:'Скаут уже ездил сегодня.',roster_min:'Нельзя: останется меньше 20 игроков.',goalies:'Нельзя: нужны два вратаря.',empty:'Выберите игроков.',too_many_open:'Не больше 5 открытых предложений.',expired:'Предложение истекло.',no_trade:'Предложение уже неактуально.'};
+Object.assign(OERR,OMERR);
+async function oMPost(path,body){OL.busy=true;render();const r=await oPost(path,body);OL.busy=false;return r;}
+Object.assign(OACT,{
+  oMS(id){OL.ms=id;render();if(id==='tr'){const my=oMy();if(my!=null&&!OL.team[my])oTeam(my).then(render);}},
+  oMF(id){OL.mf=id;render();},
+  oOffer(id){const p=OL.mk.fa.find(x=>x.id===+id);if(!p)return;OL.offer={id:p.id,sal:oRs(p.ask),yrs:Math.min(5,p.askY)};U.sheet={type:'ooffer'};render();},
+  oSal(d){const o=OL.offer;o.sal=oRs(o.sal+ +d);U.keepSheet=true;render();},
+  oYrs(y){OL.offer.yrs=+y;U.keepSheet=true;render();},
+  async oSign(){const o=OL.offer,p=OL.mk.fa.find(x=>x.id===o.id);const r=await oMPost('/api/online/sign',o);
+    if(r&&r.signed){U.sheet=null;toast(`${p?p.f+' '+p.l:'Игрок'} в составе!`);sfx('sign');track('online_sign');}
+    else if(r){if(p){p.pat=r.pat;}toast(r.pat>0?`Отказ. Терпение −${r.drop}, осталось ${r.pat}.`:'Игрок прекратил с вами переговоры.');if(!r.pat)U.sheet=null;}
+    await oMk();const my=oMy();if(my!=null)oTeam(my).then(render);},
+  async oScout(){const r=await oMPost('/api/online/scout');if(r)toast('Скаут вернулся с тремя кандидатами.');await oMk();},
+  async oOsSign(id){const r=await oMPost('/api/online/os-sign',{id:+id});if(r){toast('Подписан!');sfx('sign');}await oMk();const my=oMy();if(my!=null)oTeam(my).then(render);},
+  oPl(id){OL.confirm=null;U.sheet={type:'opl',id:+id};render();},
+  oRelAsk(id){OL.confirm='rel'+id;U.keepSheet=true;render();},
+  async oRel(id){const r=await oMPost('/api/online/release',{id:+id});U.sheet=null;OL.confirm=null;if(r)toast(`Контракт расторгнут. Под потолком остаётся ${money(r.dead)}.`);await oMk();oTeam(oMy()).then(render);},
+  oTT(id){OL.tr={to:+id,give:[],get:[],ev:null};render();oTeam(+id).then(render);const my=oMy();if(!OL.team[my])oTeam(my).then(render);},
+  oTP(id){const [side,pid]=id.split('|'),a=OL.tr[side],n=+pid,i=a.indexOf(n);i<0?a.push(n):a.splice(i,1);U.keepSheet=true;oTradeEval();},
+  async oTSend(){const tr=OL.tr;const r=await oMPost('/api/online/trade',{to:tr.to,give:tr.give,get:tr.get});
+    if(r&&r.accepted){toast('Сделка закрыта!');sfx('sign');OL.tr={to:tr.to,give:[],get:[],ev:null};}
+    else if(r&&r.pending){toast('Предложение отправлено.');OL.tr={to:tr.to,give:[],get:[],ev:null};}
+    else if(r&&r.accepted===false)toast(`«${oT(tr.to).name}» отклонили предложение.`);
+    await oMk();const my=oMy();await Promise.all([oTeam(my),oTeam(tr.to)]);render();},
+  async oTA(id){const [tid,action]=id.split('|');const r=await oMPost('/api/online/trade/answer',{id:tid,action});
+    if(r)toast(action==='accept'?'Обмен состоялся!':action==='decline'?'Предложение отклонено.':'Предложение отозвано.');if(r&&action==='accept')sfx('sign');
+    await oMk();const my=oMy();if(my!=null)oTeam(my).then(render);},
+});
 
 /* ---------- главное меню ---------- */
 const HOME_IC='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11 12 4l9 7"/><path d="M5.5 9.5V20h13V9.5"/></svg>';

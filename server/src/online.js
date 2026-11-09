@@ -1,5 +1,6 @@
 import zlib from 'node:zlib';
 import { loadGame } from './engine.js';
+import { marketView, signFA, scoutOS, signOS, releasePlayer, tradeCheck, proposeTrade, answerTrade, marketTick } from './market.js';
 import { createSeason, runDue, publicView, joinSeason, teamView, setPlan, setLines } from './league.js';
 
 /** Онлайн-режим: один активный сезон в памяти, все изменения по очереди, состояние сохраняется в базу. */
@@ -20,6 +21,7 @@ export function makeOnline(pool, htmlPath, log = console) {
   async function tick(now = Date.now()) {
     return q(async () => {
       if (!S) return 0;
+      marketTick(S, now);
       const games = runDue(G, S, now);
       if (!games.length) return 0;
       for (const g of games) {
@@ -79,5 +81,22 @@ export function makeOnline(pool, htmlPath, log = console) {
   async function lines(uid, body, now = Date.now()) {
     return q(async () => { if (!S) return { error: 'no_season' }; const r = setLines(G, S, uid, body, now); if (r.ok) await save(); return r; });
   }
-  return { init, tick, create, view, join, touch, game, team, plan, lines, get active() { return !!S; } };
+  // рынок: все изменения через очередь, после успешного — сохранение
+  const mut = (fn) => async (uid, body, now = Date.now()) => q(async () => {
+    if (!S) return { error: 'no_season' };
+    const r = fn(G, S, uid, body || {}, now);
+    if (r && r.ok) await save();
+    return r;
+  });
+  function market(uid, now = Date.now()) { if (!S) return null; return marketView(G, S, uid, now); }
+  function tradeEval(uid, b, now = Date.now()) {
+    if (!S) return { error: 'no_season' };
+    const e = Object.entries(S.online.humans).find(([, h]) => h && h.uid === uid && !h.bot);
+    if (!e) return { error: 'not_joined' };
+    return tradeCheck(G, S, +e[0], Number(b.to), (b.give || []).map(Number), (b.get || []).map(Number), now);
+  }
+  return { init, tick, create, view, join, touch, game, team, plan, lines, market, tradeEval,
+    sign: mut(signFA), scout: mut((G_, S_, uid, b, now) => scoutOS(G_, S_, uid, now)), osSign: mut(signOS), release: mut(releasePlayer),
+    trade: mut(proposeTrade), answer: mut((G_, S_, uid, b, now) => answerTrade(G_, S_, uid, String(b.id), String(b.action), now)),
+    get active() { return !!S; } };
 }

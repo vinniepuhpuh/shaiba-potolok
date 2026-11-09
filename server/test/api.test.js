@@ -221,6 +221,55 @@ test('онлайн-сезон: создание, вход, расчёт, тра�
     const bad = JSON.parse(JSON.stringify(Lc)); bad.f[0][1] = bad.f[0][0];
     r = await oapp.inject({ method: 'POST', url: '/api/online/lines', headers: H, payload: { lines: bad } });
     assert.equal(r.statusCode, 409, 'повтор игрока');
+    // рынок
+    r = await oapp.inject({ method: 'GET', url: '/api/online/market', headers: H });
+    let mk = r.json();
+    assert.ok(mk.open.fa && mk.open.trade && mk.fa.length > 10 && mk.my.team === 3);
+    const room = mk.my.cap - mk.my.pay;
+    const fa = mk.fa.find((p) => p.ask <= room) || mk.fa[mk.fa.length - 1];
+    r = await oapp.inject({ method: 'POST', url: '/api/online/sign', headers: H, payload: { id: fa.id, sal: Math.min(room, Math.round(fa.ask * 1.3 / 10) * 10), yrs: fa.askY > 5 ? 5 : fa.askY } });
+    assert.ok(r.json().ok, r.body);
+    r = await oapp.inject({ method: 'POST', url: '/api/online/scout', headers: H });
+    assert.ok(r.json().ok, r.body);
+    r = await oapp.inject({ method: 'POST', url: '/api/online/scout', headers: H });
+    assert.equal(r.json().error, 'os_today');
+    mk = (await oapp.inject({ method: 'GET', url: '/api/online/market', headers: H })).json();
+    assert.equal(mk.my.os.length, 3);
+    r = await oapp.inject({ method: 'GET', url: '/api/online/market' });
+    assert.equal(r.json().my, null, 'без входа — без личного списка');
+    // обмен с компьютером: даром не отдаёт, за сильного отдаёт слабого
+    const t3 = (await oapp.inject({ method: 'GET', url: '/api/online/team/3', headers: H })).json();
+    const t5 = (await oapp.inject({ method: 'GET', url: '/api/online/team/5', headers: H })).json();
+    const best5 = t5.players.filter((p) => p.pos !== 'G').sort((a, b) => b.ovr - a.ovr)[0];
+    r = await oapp.inject({ method: 'POST', url: '/api/online/trade/eval', headers: H, payload: { to: 5, give: [], get: [best5.id] } });
+    assert.equal(r.json().deal, false);
+    const best3 = t3.players.filter((p) => p.pos !== 'G').sort((a, b) => b.ovr - a.ovr)[0];
+    const room5 = mk.cap - t5.players.filter((p) => p.yrs > 0).reduce((x, p) => x + p.sal, 0);
+    const weak5 = t5.players.filter((p) => p.pos !== 'G' && p.ovr <= best3.ovr - 6 && best3.sal - p.sal <= room5).sort((a, b) => b.sal - a.sal)[0];
+    r = await oapp.inject({ method: 'POST', url: '/api/online/trade', headers: H, payload: { to: 5, give: [best3.id], get: [weak5.id] } });
+    assert.equal(r.json().accepted, true, r.body);
+    // обмен с человеком: предложение → принятие
+    const H2 = { authorization: 'Bearer ' + b.token };
+    r = await oapp.inject({ method: 'POST', url: '/api/online/join', headers: H2, payload: { team: 6 } });
+    assert.ok(r.json().ok);
+    const t6 = (await oapp.inject({ method: 'GET', url: '/api/online/team/6', headers: H2 })).json();
+    const cheap = (ps) => ps.filter((p) => p.pos !== 'G' && p.yrs > 0).sort((x, y) => x.sal - y.sal)[0];
+    const a6 = cheap(t6.players), a3 = cheap((await oapp.inject({ method: 'GET', url: '/api/online/team/3', headers: H })).json().players);
+    r = await oapp.inject({ method: 'POST', url: '/api/online/trade', headers: H, payload: { to: 6, give: [a3.id], get: [a6.id] } });
+    assert.ok(r.json().pending, r.body);
+    const tid = r.json().trade.id;
+    r = await oapp.inject({ method: 'POST', url: '/api/online/trade/answer', headers: H, payload: { id: tid, action: 'accept' } });
+    assert.equal(r.statusCode, 409, 'принимает только получатель');
+    r = await oapp.inject({ method: 'POST', url: '/api/online/trade/answer', headers: H2, payload: { id: tid, action: 'accept' } });
+    assert.ok(r.json().ok, r.body);
+    const t6b = (await oapp.inject({ method: 'GET', url: '/api/online/team/6', headers: H2 })).json();
+    assert.ok(t6b.players.some((p) => p.id === a3.id));
+    // расторжение
+    const cut = t6b.players.filter((p) => p.pos !== 'G').sort((a, b) => a.ovr - b.ovr)[0];
+    r = await oapp.inject({ method: 'POST', url: '/api/online/release', headers: H2, payload: { id: cut.id } });
+    assert.ok(r.json().ok && r.json().dead > 0, r.body);
+    mk = (await oapp.inject({ method: 'GET', url: '/api/online/market', headers: H2 })).json();
+    assert.equal(mk.my.dead, r.json().dead);
     // первый игровой слот
     const first = v.slots[0];
     assert.equal(await online.tick(first.t - 1000), 0, 'рано');
