@@ -57,6 +57,20 @@
 .prow.o3{grid-template-columns:34px 1fr auto}
 .center{text-align:center}
 .mode-btn.big{height:auto;padding:11px 14px;margin-top:12px;font-size:14px;width:100%;border-color:#ffffff55}
+.mhero{padding-block:34px 26px}
+.mhero h1{font:800 30px/1.1 var(--fd)}
+.mmodes{display:flex;flex-direction:column;gap:10px;margin:12px 0}
+.mmode{display:flex;gap:14px;align-items:center;text-align:left;width:100%;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px;color:var(--ink);font:inherit;cursor:pointer;box-shadow:0 1px 2px #0000000d}
+.mmode:hover{border-color:var(--ink)}
+.mmode>div{flex:1;min-width:0}
+.mmode b{display:flex;align-items:center;gap:8px;font:800 18px var(--fd)}
+.mmode small{display:block;color:var(--muted);font-size:13px;margin-top:3px;line-height:1.35}
+.mmode i{display:block;font-style:normal;font-weight:700;font-size:13.5px;margin-top:8px;color:var(--red)}
+.mic{font-size:30px;width:48px;text-align:center;flex:none}
+.mava{width:44px;height:44px;border-radius:50%;background:var(--board);color:var(--board-ink);display:grid;place-items:center;font:800 18px var(--fd);flex:none}
+.macc{margin-top:14px}.macc .btn-row{margin-top:10px}
+.btn .dot,.mmode .dot{position:static;display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--red);vertical-align:middle}
+a.btn{text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
 </style>
 <style>
 /* Layout: one-column phone app. Scoreboard header on top, scrolling content, tab bar pinned to the bottom. */
@@ -1921,7 +1935,8 @@ function load(){try{const s=localStorage.getItem(KEY);if(s){const o=JSON.parse(s
 
 /* ---------- changelog ---------- */
 const CHANGES=[
-  {v:'2026-11-08a',d:'8 ноября',t:'Онлайн-лига',items:['Новая кнопка «Онлайн» вверху экрана: переключает между карьерой и онлайн-лигой, где клубы ведут живые люди.','Онлайн-сезон: 8 клубов, по 4 матча с каждым соперником, все выходят в плей-офф. Матчи идут каждый вечер по расписанию.','Матчи можно смотреть в прямой трансляции, а потом в записи и протоколе. Результат открывается только в конце трансляции.','Тактику и звенья задаёте заранее: план по умолчанию и отдельный план на любой матч.','Короткое обучение по онлайн-лиге при первом входе. Пройти снова — в меню «⋯».','Первый, тестовый сезон стартует скоро — дату объявим в канале.']},
+  {v:'2026-11-09a',d:'9 ноября',t:'Главное меню',items:['При запуске открывается главное меню: ваш аккаунт и состояние облака, выбор режима — карьера или онлайн-лига.','На карточках режимов видно главное: клуб и день сезона в карьере, место и следующий матч в онлайн-лиге.','Вернуться в меню из игры — кнопка с домиком вверху или «Назад».']},
+  {v:'2026-11-08a',d:'8 ноября',t:'Онлайн-лига',items:['Новый режим — онлайн-лига, где клубы ведут живые люди.','Онлайн-сезон: 8 клубов, по 4 матча с каждым соперником, все выходят в плей-офф. Матчи идут каждый вечер по расписанию.','Матчи можно смотреть в прямой трансляции, а потом в записи и протоколе. Результат открывается только в конце трансляции.','Тактику и звенья задаёте заранее: план по умолчанию и отдельный план на любой матч.','Короткое обучение по онлайн-лиге при первом входе. Пройти снова — в меню «⋯».','Первый, тестовый сезон стартует скоро — дату объявим в канале.']},
   {v:'2026-11-07c',d:'7 ноября',t:'Коды',items:['В меню «⋯» появилась кнопка «Ввести код» — для компенсаций и подарков.']},
   {v:'2026-11-07b',d:'7 ноября',t:'Исправлен драфт',items:['Пики, полученные в обменах после окончания сезона, теперь действительно ваши на драфте. Раньше очередь драфта считалась в конце сезона, и такие пики использовали прежние владельцы.']},
   {v:'2026-11-07a',d:'7 ноября',t:'Полноэкранный режим',items:['Верхняя панель с клубом и потолком больше не прячется под часами и кнопками Telegram на телефоне.']},
@@ -2216,7 +2231,7 @@ function header(){
   const t=T(S.user),pay=payroll(S.user),dead=deadSum(),room=S.cap-pay;
   const rec=gp(t)?`${t.w}-${t.l}-${t.ot} · ${pts(t)} оч.`:'';
   const ph=S.phase==='regular'?`День ${Math.min(S.day+1,DAYS)}/${DAYS}`:S.phase==='playoffs'?'Плей-офф':S.phase==='done'?'Сезон завершён':S.off&&S.off.step==='fa'?`Рынок, день ${Math.min(S.off.day,FA_DAYS)}/${FA_DAYS}`:'Межсезонье';
-  return `<header class="top gut"><div class="top-row">${badge(t,44)}<div class="top-name"><h1>${t.city} ${t.name}</h1><small>${seasonLbl()} · ${ph}${rec?' · '+rec:''}</small></div><button class="mode-btn" data-a="oMode" data-id="online">Онлайн</button><button class="icon-btn" data-a="menu" aria-label="Меню">${ICON.menu}</button></div>
+  return `<header class="top gut"><div class="top-row">${badge(t,44)}<div class="top-name"><h1>${t.city} ${t.name}</h1><small>${seasonLbl()} · ${ph}${rec?' · '+rec:''}</small></div><button class="icon-btn" data-a="mGo" data-id="menu" aria-label="Главное меню">${HOME_IC}</button><button class="icon-btn" data-a="menu" aria-label="Меню">${ICON.menu}</button></div>
   <div class="cap" data-tut="cap"><div class="cap-bar"><i style="width:${clamp((pay-dead)/S.cap,0,1)*100}%;background:var(--board-ink)"></i><i style="width:${clamp(dead/S.cap,0,1)*100}%;background:var(--red)"></i></div>
   <div class="cap-lbl"><span>Зарплаты <b>${money(pay)}</b> / ${money(S.cap)}</span><span>Свободно <b style="${room<0?'color:var(--red)':''}">${money(room)}</b></span><span>Касса <b style="${S.fin.cash<0?'color:var(--red)':''}">${money(S.fin.cash)}</b></span></div></div></header>`;
 }
@@ -2561,7 +2576,7 @@ function viewPick(){
   const card=t=>`<button class="tcard" data-a="preview" data-id="${t.id}" ${t.id===S.prevUser?'disabled style="opacity:.4"':''}>${badge(t,52)}<div><small>${t.city}</small><b>${t.name}</b><small class="num">сила ${R_[t.id].t.toFixed(1)} · своб. ${money(S.cap-payroll(t.id))}</small></div></button>`;
   const hero=S.prevUser!=null?`<h1>Новая работа</h1><p>«${T(S.prevUser).name}» с вами расстались. Выберите новый клуб: касса и улучшения у него свои, владелец даёт вам кредит доверия 50/100 и испытательный срок.</p>`:
   `<h1>Генменеджер</h1><p class="hero-sub">хоккейный симулятор</p><p>Трансферы, потолок зарплат и деньги клуба. 32 клуба от Калининграда до Харбина: выберите свой и соберите чемпиона.</p>`;
-  return `<header class="pick-hero gut">${hero}<button class="mode-btn big" data-a="oMode" data-id="online">🏒 Онлайн-лига: играть против людей</button></header>
+  return `<header class="pick-hero gut">${hero}<button class="mode-btn big" data-a="mGo" data-id="menu">← Главное меню</button></header>
   <main class="gut">${[0,1,2,3].map(d=>`<section><div class="divh">${CONF[d<2?0:1]} конференция · ${DIVS[d]} дивизион</div><div class="tgrid">${S.teams.filter(t=>t.div===d).map(card).join('')}</div></section>`).join('')}</main>`;
 }
 
@@ -2703,6 +2718,7 @@ function sheetMenu(){
 
 /* ---------- render ---------- */
 function render(){
+  if(U.mode==='menu'){renderMain();return;}
   if(U.mode==='online'){renderOnline();return;}
   inv();
   if(U.startT){U.startT=false;startTimer();}
@@ -2750,9 +2766,10 @@ function tog(arr,n){const i=arr.indexOf(n);i<0?arr.push(n):arr.splice(i,1);}
 
 function act(a,id){
   if(OACT[a]){OACT[a](id);return;}
+  if(U.mode==='menu'&&a==='tourAgain'){mGo('career');if(S.user!=null)tourStart();render();return;}
   if(U.mode==='online'&&a==='tourAgain'){oTourStart();render();return;}
   if(U.mode==='online'&&a==='newYes')oModeSet(false);
-  if(U.mode==='online'&&!['menu','close','veil','sndOn','ambOn','wn','help','codeOpen','codeGo','newGame','hintsReset','cloudKeep','cloudSheet','cloudTake','linkTg'].includes(a))return;
+  if(U.mode!=='career'&&!['menu','close','veil','sndOn','ambOn','wn','help','codeOpen','codeGo','newGame','hintsReset','cloudKeep','cloudSheet','cloudTake','linkTg'].includes(a))return;
   inv();
   const seq0=S.nseq||0;
   const n=Number(id),F=S.fin;
@@ -2888,11 +2905,11 @@ function tgInit(){
   try{TG.disableVerticalSwipes&&TG.disableVerticalSwipes();}catch(e){}
   try{TG.setHeaderColor&&TG.setHeaderColor('#0e1c2b');TG.setBackgroundColor&&TG.setBackgroundColor(TG.colorScheme==='dark'?'#0b131c':'#e8eef3');}catch(e){}
   try{document.documentElement.dataset.theme=TG.colorScheme==='dark'?'dark':'light';TG.onEvent&&TG.onEvent('themeChanged',()=>{document.documentElement.dataset.theme=TG.colorScheme==='dark'?'dark':'light';});}catch(e){}
-  try{TG.BackButton.onClick(()=>{if(U.sheet){act('close');}else if(S.user!=null&&!S.live&&U.tab!=='club'){act('tab','club');}});}catch(e){}
+  try{TG.BackButton.onClick(()=>{if(U.sheet){act('close');}else if(U.mode==='online'){if(U.tour)act('oTSkip');else if(OL.gm)act('oClose');else if(OL.tab!=='home')act('oTab','home');else mGo('menu');}else if(U.mode==='career'){if(U.tour)act('tourSkip');else if(S.user!=null&&!S.live&&U.tab!=='club')act('tab','club');else if(!S.live)mGo('menu');}});}catch(e){}
 }
 function tgSync(){
   if(!TG)return;
-  try{const show=!!U.sheet||(S.user!=null&&!S.live&&U.tab!=='club');show?TG.BackButton.show():TG.BackButton.hide();}catch(e){}
+  try{const show=!!U.sheet||U.mode==='online'||(U.mode==='career'&&!S.live);show?TG.BackButton.show():TG.BackButton.hide();}catch(e){}
 }
 const tgHaptic=k=>{try{TG&&TG.HapticFeedback&&(k==='goal'?TG.HapticFeedback.notificationOccurred('success'):TG.HapticFeedback.impactOccurred('light'));}catch(e){}};
 /* ---------- cloud saves & stats (server) ---------- */
@@ -2943,10 +2960,12 @@ function appInit(){
   document.documentElement.classList.add('native');
   const A=CapP('App');if(!A)return;
   try{A.addListener('backButton',()=>{
-    if(U.mode==='online'){if(U.tour){act('oTSkip');return;}if(OL.gm){act('oClose');return;}if(U.sheet){act('close');return;}if(OL.tab!=='home'){act('oTab','home');return;}}
+    if(U.mode==='menu'){if(U.sheet){act('close');return;}A.minimizeApp?A.minimizeApp():A.exitApp();return;}
+    if(U.mode==='online'){if(U.tour){act('oTSkip');return;}if(OL.gm){act('oClose');return;}if(U.sheet){act('close');return;}if(OL.tab!=='home'){act('oTab','home');return;}mGo('menu');return;}
     if(U.tour){act('tourSkip');return;}
     if(U.sheet){act('close');return;}
     if(S&&S.user!=null&&!S.live&&U.tab!=='club'){act('tab','club');return;}
+    if(!S.live){mGo('menu');return;}
     A.minimizeApp?A.minimizeApp():A.exitApp();
   });}catch(e){}
   try{A.addListener('resume',()=>{linkCheck();});A.addListener('pause',()=>{cloudPush(false);trackFlush();});}catch(e){}
@@ -3056,10 +3075,8 @@ function boot(data){
   window.claude?.hot?.snapshot?.(()=>({S}));
   window.addEventListener('resize',()=>tourPlace());window.addEventListener('scroll',()=>{if(U.tour)tourPlace();},{passive:true});
   if(S.live)U.mv={seg:'feed',spd:0,lines:false};
-  if(S.user!=null&&!S.live&&verSeen()!==VER){U.sheet={type:'wn'};}
   if(CL.conflict)U.sheet={type:'cloud'};
-  verMark();
-  if(U.mode==='online'){U.sheet=null;oPollStart();oLoad();}
+  U.mode='menu';U.sheet=CL.conflict?{type:'cloud'}:null;oPollStart();if(oOk())oLoad(true);
   render();
   track('open',{v:VER,s:S.season});
   if(CL.dirty&&!CL.conflict)setTimeout(()=>cloudPush(false),1500);
@@ -3410,11 +3427,11 @@ async function oLoad(quiet){
     const my=oMy();if(my!=null&&(!OL.team[my]||quiet!=='keep'))await oTeam(my);
   }catch(e){if(!OL.v)OL.err='net';}
   finally{OL.loading=false;}
-  if(U.mode==='online')render();
+  if(U.mode!=='career')render();
 }
 async function oTeam(id){try{const t=await oGet('/api/online/team/'+id);if(t)OL.team[id]=t;}catch(e){}}
 let _oPoll=null;
-function oPollStart(){if(_oPoll)return;_oPoll=setInterval(()=>{if(U.mode!=='online'||document.hidden)return;if(Date.now()-OL.at>(oLiveNow()?20000:60000))oLoad(true);},5000);}
+function oPollStart(){if(_oPoll)return;_oPoll=setInterval(()=>{if(U.mode==='career'||document.hidden)return;if(Date.now()-OL.at>(oLiveNow()?20000:60000))oLoad(true);},5000);}
 const oLiveNow=()=>OL.v&&OL.v.slots.some(s=>s.games.some(g=>g.live));
 /* слоты, в которых играет клуб */
 const oMine=(tid)=>OL.v.slots.filter(s=>s.games.some(g=>g.h===tid||g.a===tid)).map(s=>({s,g:s.games.find(g=>g.h===tid||g.a===tid)}));
@@ -3430,7 +3447,7 @@ function oGameRow(s,g,me){
 function oHeader(){
   const v=OL.v,my=oMy(),t=my!=null?oT(my):null;
   const sub=!v?'Онлайн-лига':`${v.name}${t?' · '+oRec(t):''}`;
-  return `<header class="top gut"><div class="top-row">${t?badge(t,44):'<span class="obig">🏒</span>'}<div class="top-name"><h1>${t?`${t.city} ${t.name}`:'Онлайн-лига'}</h1><small>${sub}</small></div><button class="mode-btn" data-tut="o-mode" data-a="oMode" data-id="career">Карьера</button><button class="icon-btn" data-a="menu" aria-label="Меню">${ICON.menu}</button></div></header>`;
+  return `<header class="top gut"><div class="top-row">${t?badge(t,44):'<span class="obig">🏒</span>'}<div class="top-name"><h1>${t?`${t.city} ${t.name}`:'Онлайн-лига'}</h1><small>${sub}</small></div><button class="icon-btn" data-tut="o-mode" data-a="mGo" data-id="menu" aria-label="Главное меню">${HOME_IC}</button><button class="icon-btn" data-a="menu" aria-label="Меню">${ICON.menu}</button></div></header>`;
 }
 function oTabs(){
   const L=[['home','Сезон','club'],['games','Матчи','league'],['table','Таблица','fin'],['roster','Состав','roster']];
@@ -3684,7 +3701,7 @@ function renderOnline(){
 }
 const OTOUR=[
   {title:'Онлайн-лига',text:'Здесь клубы ведут живые менеджеры, а не компьютер. Матчи идут по расписанию на сервере, даже когда вы не в игре. Покажу, чем это отличается от карьеры.',first:true},
-  {tab:'home',t:'o-mode',title:'Карьера и онлайн',text:'Эта кнопка переключает режимы. Карьера сохраняется как была: можно играть и там, и тут.'},
+  {tab:'home',t:'o-mode',title:'Главное меню',text:'Домик возвращает в главное меню: там переключаются режимы. Карьера сохраняется как была — можно играть и там, и тут.'},
   {tab:'home',t:'o-club',title:'Свой клуб',text:'Клуб выбирают до дедлайна, один на сезон. Зарплаты у всех клубов уравнены, а профиль показывает, как клуб будет меняться: молодая команда к плей-офф растёт, опытная сильна сразу, но к концу немного сдаёт.'},
   {tab:'games',t:'o-games',title:'Расписание и трансляции',text:'Матчи каждый вечер в одно и то же время. Во время матча горит LIVE: нажмите — откроется прямая трансляция. Счёт держится в секрете до её конца, даже в таблице. Потом матч можно посмотреть в записи или открыть протокол.'},
   {tab:'roster',rs:'plan',t:'o-plan',title:'План на матч',text:'Во время матча вы не можете вмешаться, поэтому тактику задают заранее. «По умолчанию» действует на все игры, а на любой ближайший матч можно поставить свой план — например, стиль, который бьёт любимый стиль соперника. «Авто» — решает компьютер.'},
@@ -3702,6 +3719,7 @@ function oTourGo(i){
 }
 const oTourSeen=()=>{try{return localStorage.getItem('gm-otour')==='1';}catch(e){return true;}};
 const OACT={
+  mGo(id){mGo(id);},
   oTNext(){oTourGo(U.tour.i+1);},
   oTPrev(){oTourGo(U.tour.i-1);},
   oTSkip(){track('otour_skip',{i:U.tour?U.tour.i:0});U.tour=null;try{localStorage.setItem('gm-otour','1');}catch(e){}render();},
@@ -3730,6 +3748,62 @@ const OACT={
   oBench(id){const k='b|'+id;if(OL.sel&&!OL.sel.startsWith('b|'))oSlotTap(k);else{OL.sel=OL.sel===k?null:k;render();}},
   oAuto(id){OL.sel=null;oLinesSend(id?{mode:id}:{});toast(id?'Звенья собраны.':'Звенья будет собирать компьютер.');},
 };
+
+/* ---------- главное меню ---------- */
+const HOME_IC='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11 12 4l9 7"/><path d="M5.5 9.5V20h13V9.5"/></svg>';
+function mAcc(){
+  let tu=TG&&TG.initDataUnsafe&&TG.initDataUnsafe.user;
+  if(!tu&&TG&&TG.initData){try{tu=JSON.parse(new URLSearchParams(TG.initData).get('user'));}catch(e){}}
+  let who,sub,btn='';
+  if(tu){who=oEsc([tu.first_name,tu.last_name].filter(Boolean).join(' ')||'Игрок');sub=`Вход через Telegram${tu.username?' · @'+oEsc(tu.username):''}`;}
+  else if(CAP){who='Аккаунт на этом устройстве';sub=CL.linked?'Привязан Telegram: тот же прогресс в боте @hmrurubot':'Telegram не привязан';if(!CL.linked)btn='<button class="btn sm" data-a="linkTg">Привязать Telegram</button>';}
+  else{who='Вы не вошли';sub='Карьера сохраняется только в этом браузере. Чтобы играть в онлайн-лиге и хранить прогресс в облаке, откройте игру в Telegram.';btn='<a class="btn sm" href="https://t.me/hmrurubot" target="_blank" rel="noopener">Открыть в Telegram</a>';}
+  const st=cloudable()?(CL.conflict?'<span class="bad">сохранения разошлись</span>':CL.st==='ok'?'☁️ облако подключено':CL.st==='offline'?'нет связи с сервером':'подключаюсь…'):'';
+  const ini=(tu&&tu.first_name?tu.first_name[0]:CAP?'📱':'?').toUpperCase();
+  return `<section class="card macc"><div class="orow"><span class="mava">${ini}</span><div><b>${who}</b><small>${sub}</small>${st?`<small>${st}${CL.uid?` · игрок №${CL.uid}`:''}</small>`:''}</div></div>${btn?`<div class="btn-row">${btn}${CL.conflict?'<button class="btn sm pri" data-a="cloudSheet">Выбрать сохранение</button>':''}</div>`:CL.conflict?'<div class="btn-row"><button class="btn sm pri" data-a="cloudSheet">Выбрать сохранение</button></div>':''}</section>`;
+}
+function mCareer(){
+  if(S.user==null)return `<button class="mmode" data-a="mGo" data-id="career"><span class="mic">🏆</span><div><b>Карьера</b><small>Один против 31 клуба под управлением компьютера. Сезоны, драфт, трансферы и деньги клуба — в своём темпе.</small><i>Выбрать клуб →</i></div></button>`;
+  const t=T(S.user),ph=S.phase==='regular'?`день ${Math.min(S.day+1,DAYS)} из ${DAYS}`:S.phase==='playoffs'?'плей-офф':S.phase==='done'?'сезон завершён':'межсезонье';
+  return `<button class="mmode" data-a="mGo" data-id="career">${badge(t,48)}<div><b>Карьера</b><small>${t.city} ${t.name} · ${seasonLbl()} · ${ph}${gp(t)?` · ${t.w}-${t.l}-${t.ot}`:''}</small><i>Продолжить →</i></div></button>`;
+}
+function mOnline(){
+  const v=OL.v,my=v?oMy():null;
+  let sub,cta,ic='<span class="mic">🌐</span>',live='';
+  if(!oOk()){sub='Сезоны против живых менеджеров. Доступно в Telegram и в приложении.';cta='Подробнее →';}
+  else if(!v){sub=OL.err==='none'?'Сезоны против живых менеджеров. Следующий сезон скоро — дату объявим в канале.':OL.err==='net'?'Нет связи с сервером лиги.':'Загружаю…';cta='Открыть →';}
+  else{
+    if(v.slots.some(s=>s.games.some(g=>g.live)))live='<span class="olive">● LIVE</span>';
+    if(my!=null){const t=oT(my),pl=oStand().findIndex(x=>x.id===my)+1,nx=oMine(my).find(x=>!x.g.res);ic=badge(t,48);
+      sub=`${v.name} · ${t.name} · ${pl}-е место${nx?` · следующий матч ${oWhen(nx.s.t)}`:''}`;cta='Продолжить →';}
+    else if(v.canJoin){const free=v.teams.filter(t=>!t.human).length;sub=`${v.name}: идёт набор, свободно клубов: ${free} из ${v.teams.length}. Вход до ${oWhen(v.deadlineT)}.`;cta='Выбрать клуб →';}
+    else{sub=`${v.name} идёт без набора: можно смотреть матчи и таблицу.`;cta='Смотреть →';}
+  }
+  return `<button class="mmode" data-a="mGo" data-id="online">${ic}<div><b>Онлайн-лига ${live}</b><small>${sub}</small><i>${cta}</i></div></button>`;
+}
+function viewMain(){
+  return `<header class="pick-hero gut mhero"><h1>Генменеджер</h1><p class="hero-sub">хоккейный симулятор</p></header>
+  <main class="gut">${mAcc()}<div class="mmodes">${mCareer()}${mOnline()}</div>
+  <div class="btn-row"><button class="btn sm" data-a="wn">Что нового${verSeen()!==VER?' <i class="dot"></i>':''}</button><button class="btn sm" data-a="help">Как играть</button><button class="btn sm" data-a="menu">Настройки</button></div>
+  <p class="small muted center">Новости и обновления — в канале игры. Бот: @hmrurubot</p></main>`;
+}
+function renderMain(){
+  const app=document.getElementById('app');
+  let html=viewMain();
+  if(U.sheet){const s=U.sheet;let inner='';
+    if(s.type==='menu')inner=sheetMenu();else if(s.type==='wn')inner=sheetWhatsNew();else if(s.type==='help')inner=sheetHelp();else if(s.type==='cloud')inner=sheetCloud();else if(s.type==='code')inner=sheetCode();
+    html+=`<div class="veil" data-a="veil"><div class="sheet gut" role="dialog" aria-modal="true"><div class="grab"></div>${inner}</div></div>`;}
+  if(U.toast)html+=`<div class="toast" role="status">${U.toast}</div>`;
+  app.innerHTML=html;document.body.style.overflow='';tgSync();
+}
+function mGo(id){
+  stopTimer();U.sheet=null;window.scrollTo(0,0);
+  if(id==='online'){oModeSet(true);oPollStart();OL.tab='home';oLoad();}
+  else if(id==='career'){oStop();OL.gm=null;oModeSet(false);
+    if(S.user!=null&&!S.live&&verSeen()!==VER){U.sheet={type:'wn'};verMark();}}
+  else{oStop();OL.gm=null;U.tour=null;U.mode='menu';if(oOk())oLoad(true);}
+  render();
+}
 
 if(typeof document!=='undefined'&&document.getElementById){
   if(window.claude?.hot?.ready)window.claude.hot.ready(boot);
