@@ -1,0 +1,11 @@
+name: Проверка сайта
+on: workflow_dispatch
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          for u in https://gmhockey.ru/ https://gmhockey.ru/api/health https://www.gmhockey.ru/ https://135-106-181-183.sslip.io/api/health; do
+            curl -sS -o /dev/null -w "$u %{http_code} %{http_version} %{time_total}s\n" --max-time 20 "$u" || echo "$u FAIL"
+          done
+          curl -sSI --max-time 20 https://gmhockey.ru/ | grep -i "alt-svc\|content-type" || true
