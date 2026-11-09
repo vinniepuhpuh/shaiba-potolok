@@ -1,6 +1,17 @@
+{
+	# Только HTTP/1.1 и HTTP/2: QUIC (HTTP/3) у части мобильных операторов работает с перебоями
+	servers {
+		protocols h1 h2
+	}
+}
+
 gmhockey.ru, www.gmhockey.ru, {$DOMAIN} {
 	# json и html сжимаются, сохранения (уже gzip) — нет
 	encode gzip
+	log {
+		output stdout
+		format json
+	}
 
 	@backend path /api/* /bot/* /admin /privacy
 	handle @backend {
