@@ -337,7 +337,9 @@ export function teamView(G, S, tid, uid) {
     ...(mine ? { pot: p.pot, d: p.ovr - p.ovr0 } : {}),
   }));
   const fit = {}; for (const k in fits) fit[k] = Math.round(fits[k] * 100) / 100;
-  return { id: tid, mine, players, lines: L, fit, sty: t.sty || null,
+  const dead = (o.dead && o.dead[tid]) || 0;
+  const pay = G.ev('payroll')(tid) + dead, n = S.players.filter((p) => p.team === tid && p.yrs > 0).length;
+  return { id: tid, mine, players, lines: L, fit, sty: t.sty || null, cap: S.cap, pay, dead, n,
     plans: mine ? (h.plans || {}) : null, lmode: mine ? (h.lmode || null) : null, manual: mine ? !!h.lines : null };
 }
 const STYK = ['FC', 'PO', 'TR', 'CA', 'BAL'];

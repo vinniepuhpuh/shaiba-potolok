@@ -207,6 +207,7 @@ test('онлайн-сезон: создание, вход, расчёт, тра�
     r = await oapp.inject({ method: 'GET', url: '/api/online/team/3', headers: H });
     const tv = r.json();
     assert.ok(tv.mine && tv.players.length >= 20 && tv.players[0].pot != null && tv.lines.f.length === 4);
+    assert.ok(tv.cap > 0 && tv.pay > 0 && tv.pay <= tv.cap && tv.n >= 20);
     r = await oapp.inject({ method: 'GET', url: '/api/online/team/4', headers: H });
     assert.ok(!r.json().mine && r.json().players[0].pot === undefined, 'чужой потенциал скрыт');
     r = await oapp.inject({ method: 'POST', url: '/api/online/plan', headers: H, payload: { key: 'def', plan: { sty: 'FC', risk: 4, pull: false } } });

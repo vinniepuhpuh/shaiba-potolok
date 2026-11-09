@@ -79,6 +79,8 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center;justify-conten
 .tro{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding:10px 0}
 .tro:first-of-type{border-top:0}
 .trbar{position:sticky;bottom:calc(64px + env(safe-area-inset-bottom,0px));z-index:3}
+.trcap{display:flex;flex-wrap:wrap;gap:2px 12px;align-items:baseline;padding:8px 0;border-top:1px solid var(--line);font-size:13px}
+.trcap:first-of-type{border-top:0}.trcap>b{flex-basis:100%;font-size:14px}.trcap span b{font-family:var(--fm)}
 </style>
 <style>
 /* Layout: one-column phone app. Scoreboard header on top, scrolling content, tab bar pinned to the bottom. */
@@ -1944,6 +1946,7 @@ function load(){try{const s=localStorage.getItem(KEY);if(s){const o=JSON.parse(s
 
 /* ---------- changelog ---------- */
 const CHANGES=[
+  {v:'2026-11-09d',d:'9 ноября',t:'Зарплаты и потолок в обменах',items:['В онлайн-лиге у каждого игрока видна зарплата и оценка контракта: выгодный, по рынку или дорогой.','В обменах показан потолок обоих клубов: сколько свободно сейчас и сколько останется после сделки, а также число игроков.']},
   {v:'2026-11-09c',d:'9 ноября',t:'Рынок в онлайн-лиге',items:['В онлайн-лиге появилась вкладка «Рынок».','Свободные агенты общие на всю лигу: кто первым договорился, того и игрок.','«За рубежом» — личный список: раз в день скаут привозит трёх игроков, которых видите только вы.','Обмены: компьютерные клубы отвечают сразу и соглашаются, если обмен выгоден им на 15–20%. Живым менеджерам предложение уходит на 48 часов — принять или отклонить можно во вкладке «Рынок».','Контракт своего игрока можно расторгнуть в «Состав» → «Игроки»: половина зарплаты остаётся под потолком до конца сезона.']},
   {v:'2026-11-09b',d:'9 ноября',t:'Живые звуки арены',items:['Гол теперь звучит как на стадионе: сирена и рёв трибун.','Настоящий щелчок клюшки при броске, «ох» трибун при штанге и ликование после победы.','Во время трансляции — гул арены вместо музыки. Выключается в меню «⋯» → «Шум трибун».']},
   {v:'2026-11-09a',d:'9 ноября',t:'Главное меню',items:['При запуске открывается главное меню: ваш аккаунт и состояние облака, выбор режима — карьера или онлайн-лига.','На карточках режимов видно главное: клуб и день сезона в карьере, место и следующий матч в онлайн-лиге.','Вернуться в меню из игры — кнопка с домиком вверху или «Назад».']},
@@ -3578,10 +3581,19 @@ function oLinesCard(){
   ${bench.length?`<section class="card"><h2>В запасе<span>${bench.length}</span></h2><div class="list">${bench.map(p=>oPRow(p,'oBench')).join('')}</div></section>`:''}
   ${inj.length?`<section class="card"><h2>Травмированы<span>${inj.length}</span></h2><div class="list">${inj.map(p=>oPRow(p)).join('')}</div></section>`:''}`;
 }
+/* цена контракта относительно рейтинга: справедливая зарплата — та же формула, что у агентов */
+const oCap=()=>(OL.mk&&OL.mk.cap)||((OL.team[oMy()]||{}).cap)||80000;
+const oFair=o=>Math.min(oCap()*.2,(775+13*Math.max(0,o-60)**2)*oCap()/80000);
+/* зарплаты в онлайн-сезоне уравнены по клубам, поэтому «по рынку» — медиана лиги по известным составам */
+let _oFK=null;
+function oFairK(){const ps=Object.values(OL.team).flatMap(t=>t.players).filter(p=>p.sal>0&&p.yrs>0),key=ps.length;
+  if(_oFK&&_oFK.n===key)return _oFK.k;const r=ps.map(p=>p.sal/oFair(p.ovr)).sort((a,b)=>a-b);_oFK={n:key,k:r.length?r[r.length>>1]:1};return _oFK.k;}
+function oVal(p){const r=p.sal/(oFair(p.ovr)*oFairK());return r<=.75?['ok','выгодный']:r>=1.3?['bad','дорогой']:null;}
+function oMoney(p){if(!p.sal)return '';const v=oVal(p);return `<span class="money"><b>${money(p.sal)}</b><small class="${v?v[0]:''}">${v?v[1]:'по рынку'}</small></span>`;}
 function oPRow(p,a){
   const cur=OL.sel==='b|'+p.id,stat=p.pos==='G'?(p.gp?` · ${p.gp} и, ${p.gsa?((p.gsa-p.gga)/p.gsa).toFixed(3).replace(/^0/,''):'—'}`:''):(p.gp?` · ${p.g}+${p.a}`:'');
   const pot=p.pot!=null&&p.pot>p.ovr?` · пот. ${p.pot}`:'',gr=p.d?` · <span class="${p.d>0?'ok':'bad'}">${p.d>0?'+':''}${p.d}</span>`:'';
-  return `<button class="prow o3${cur?' sel':''}" ${a?`data-a="${a}" data-id="${p.id}"`:'disabled'}>${posB(p)}<span class="pn"><b>${nm(p)}${p.inj?' 🩹':''}</b><small>${p.age} л · ${flag(p.nat)}${p.role?' · '+ROLE_S[p.role]:''}${stat}${pot}${gr}${p.inj?` · травма, ${p.inj} дн.`:''}</small></span><span class="ovr ${tier(p.ovr)}">${p.ovr}</span></button>`;
+  return `<button class="prow${p.sal?'':' o3'}${cur?' sel':''}" ${a?`data-a="${a}" data-id="${p.id}"`:'disabled'}>${posB(p)}<span class="pn"><b>${nm(p)}${p.inj?' 🩹':''}</b><small>${p.age} л · ${flag(p.nat)}${p.role?' · '+ROLE_S[p.role]:''}${stat}${pot}${gr}${p.inj?` · травма, ${p.inj} дн.`:''}</small></span><span class="ovr ${tier(p.ovr)}">${p.ovr}</span>${oMoney(p)}</button>`;
 }
 async function oLinesSend(body){const my=oMy(),tv=OL.team[my];const r=await oPost('/api/online/lines',body);if(r&&tv){tv.lines=r.lines;tv.manual=!!body.lines||!!body.mode;}render();}
 function oSlotTap(id){
@@ -3842,11 +3854,10 @@ function oTradeView(){
   html+=`<section class="card"><h2>Новый обмен</h2><p class="small muted">Компьютерные клубы отвечают сразу и соглашаются, только если обмен выгоден им примерно на 15–20%. Живому менеджеру предложение уходит на 48 часов.</p>
   <div class="chips">${others.map(t=>`<button class="chip" data-a="oTT" data-id="${t.id}" aria-pressed="${tr.to===t.id}">${tl(t,16)} ${t.name}${t.human?' 👤':''}</button>`).join('')}</div></section>`;
   if(tr.to==null)return html;
-  const A=OL.team[my],B=OL.team[tr.to];
+  const A=OL.team[my],B=OL.team[tr.to],e=tr.ev,t=oT(tr.to);
   if(!A||!B)return html+`<section class="card"><p class="muted">Загружаю составы…</p></section>`;
-  const row=(p,side)=>{const on=tr[side].includes(p.id);return `<button class="prow o3${on?' sel':''}" data-a="oTP" data-id="${side}|${p.id}"><span class="tick">${on?'✓':''}</span><span class="pn"><b>${posT(p)} · ${nm(p)}</b><small>${p.age} л · ${money(p.sal)}${p.inj?' · травма':''}</small></span><span class="ovr ${tier(p.ovr)}">${p.ovr}</span></button>`;};
+  const row=(p,side)=>{const on=tr[side].includes(p.id);return `<button class="prow${on?' sel':''}" data-a="oTP" data-id="${side}|${p.id}"><span class="tick">${on?'✓':''}</span><span class="pn"><b>${posT(p)} · ${nm(p)}</b><small>${p.age} л${p.role?' · '+ROLE_S[p.role]:''}${p.inj?' · травма':''}</small></span><span class="ovr ${tier(p.ovr)}">${p.ovr}</span>${oMoney(p)}</button>`;};
   const list=(ps,side)=>ps.filter(p=>p.yrs>0).sort(byOvr).map(p=>row(p,side)).join('');
-  const e=tr.ev,t=oT(tr.to);
   let verdict='';
   if(tr.give.length||tr.get.length){
     if(!e)verdict='<p class="small muted">Считаю…</p>';
@@ -3854,8 +3865,11 @@ function oTradeView(){
     else if(e.human)verdict=`<p class="small">Предложение уйдёт менеджеру «${t.name}»${t.human?' ('+oEsc(t.human.name)+')':''}.</p>`;
     else verdict=`<div class="meter"><small>Интерес «${t.name}»<b>${Math.round(e.pct*100)}%</b></small><div class="bar ${e.deal?'good':''}"><i style="width:${e.pct*100}%"></i></div></div><p class="small ${e.deal?'ok':'muted'}">${e.deal?'Они готовы согласиться.':e.pct>.35?'Почти: добавьте что-нибудь или попросите меньше.':'Им это неинтересно.'}</p>`;
   }
-  html+=`<section class="card"><h2>Вы отдаёте<span>${tr.give.length}</span></h2><div class="list">${list(A.players,'give')}</div></section>
-  <section class="card"><h2>Вы получаете из «${t.name}»<span>${tr.get.length}</span></h2><div class="list">${list(B.players,'get')}</div></section>
+  const sumS=(ps,ids)=>ps.filter(p=>ids.includes(p.id)).reduce((x,p)=>x+p.sal,0),sIn=sumS(A.players,tr.give),sOut=sumS(B.players,tr.get);
+  const capRow=(lbl,tv,d,dn)=>{const r0=tv.cap-tv.pay,r1=r0-d,n1=tv.n+dn,ch=d||dn;return `<div class="trcap"><b>${lbl}</b><span>свободно <b class="${r0<0?'bad':''}">${money(r0)}</b>${ch?` → <b class="${r1<0?'bad':'ok'}">${money(r1)}</b>`:''}</span><span>зарплаты ${money(tv.pay)} / ${money(tv.cap)}</span><span>игроков ${tv.n}${dn?` → <b class="${n1>26||n1<20?'bad':''}">${n1}</b>`:''}</span></div>`;};
+  html+=`<section class="card"><h2>Потолок<span>до и после обмена</span></h2>${capRow('Вы',A,sOut-sIn,tr.get.length-tr.give.length)}${capRow('«'+t.name+'»',B,sIn-sOut,tr.give.length-tr.get.length)}${B.dead?`<p class="small muted">У «${t.name}» ${money(B.dead)} под потолком занимают расторгнутые контракты.</p>`:''}</section>`;
+  html+=`<section class="card"><h2>Вы отдаёте<span>${tr.give.length} · ${money(sIn)}</span></h2><div class="list">${list(A.players,'give')}</div></section>
+  <section class="card"><h2>Вы получаете из «${t.name}»<span>${tr.get.length} · ${money(sOut)}</span></h2><div class="list">${list(B.players,'get')}</div></section>
   <section class="card trbar">${verdict}<button class="btn pri" data-a="oTSend" ${!e||(e.issues&&e.issues.length)||(!e.human&&!e.deal)||OL.busy?'disabled':''}>${e&&e.human?'Отправить предложение':'Предложить обмен'}</button></section>`;
   return html;
 }
