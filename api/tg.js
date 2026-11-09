@@ -1,7 +1,7 @@
 // Ретранслятор Bot API: сервер игры (в России) не достаёт до api.telegram.org,
 // поэтому вызовы методов бота идут через эту функцию Vercel.
 // POST /api/tg?m=<метод>, заголовок X-Bot-Token, тело — JSON параметров метода.
-const ALLOWED = new Set(['sendMessage', 'setWebhook', 'deleteWebhook', 'getWebhookInfo', 'getMe',
+const ALLOWED = new Set(['sendMessage', 'setWebhook', 'setChatMenuButton', 'getChatMenuButton', 'deleteWebhook', 'getWebhookInfo', 'getMe',
   'answerPreCheckoutQuery', 'createInvoiceLink', 'answerCallbackQuery', 'refundStarPayment', 'getStarTransactions']);
 
 module.exports = async (req, res) => {
