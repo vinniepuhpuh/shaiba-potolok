@@ -240,7 +240,7 @@ export function buildApp({ pool, cfg, logger = true, online = null }) {
   });
   app.get('/api/online/game/:gid', async (req, reply) => {
     if (!online || !online.active) return reply.code(404).send({ error: 'no_season' });
-    const g = await online.game(String(req.params.gid));
+    const g = await online.game(String(req.params.gid), Date.now(), softUid(req));
     if (!g) return reply.code(404).send({ error: 'no_game' });
     reply.header('Cache-Control', 'no-store');
     return g;

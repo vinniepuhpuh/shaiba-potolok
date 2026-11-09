@@ -1,7 +1,7 @@
 import zlib from 'node:zlib';
 import { loadGame } from './engine.js';
 import { marketView, signFA, scoutOS, signOS, releasePlayer, tradeCheck, proposeTrade, answerTrade, marketTick } from './market.js';
-import { createSeason, runDue, publicView, joinSeason, teamView, setPlan, setLines } from './league.js';
+import { createSeason, runDue, publicView, joinSeason, teamView, setPlan, setLines, markPresence, preOf } from './league.js';
 
 /** Онлайн-режим: один активный сезон в памяти, все изменения по очереди, состояние сохраняется в базу. */
 export function makeOnline(pool, htmlPath, log = console) {
@@ -15,7 +15,15 @@ export function makeOnline(pool, htmlPath, log = console) {
   async function init() {
     G = loadGame(htmlPath);
     const r = (await pool.query("SELECT id, state FROM online_seasons WHERE status IN ('active','finished') ORDER BY id DESC LIMIT 1")).rows[0];
-    if (r) { sid = r.id; S = r.state; G.S = S; S.teams.forEach((t) => G.ev('ensureNums')(t.id)); }
+    if (r) {
+      sid = r.id; S = r.state; G.S = S; S.teams.forEach((t) => G.ev('ensureNums')(t.id));
+      // сезоны, начатые раньше: трансляция 5 минут, первая минута — выход команд и отметка «на арене»
+      const c = S.online.cfg; let ch = false;
+      if (c.preSec == null) { c.preSec = 60; ch = true; }
+      if (c.presenceK == null) { c.presenceK = 1.02; ch = true; }
+      if (c.liveMin > 5) { c.liveMin = 5; ch = true; }
+      if (ch) await save();
+    }
     log.info?.(`online: движок ${G.version}, сезон ${sid ?? 'нет'}`);
   }
   async function tick(now = Date.now()) {
@@ -61,18 +69,26 @@ export function makeOnline(pool, htmlPath, log = console) {
     if (!S) return;
     for (const h of Object.values(S.online.humans)) if (h && h.uid === uid) h.lastSeen = now;
   }
-  async function game(gid, now = Date.now()) {
+  async function game(gid, now = Date.now(), uid = null) {
     if (!S) return null;
+    // отметка присутствия идёт через очередь: состояние меняется
+    const m = await q(async () => {
+      const r = markPresence(S, uid, gid, now);
+      if (!r.error && uid && r.canMark && r.present) await save();
+      return r;
+    });
+    if (m.error) return null;
     const row = (await pool.query('SELECT gid, slot, kind, extract(epoch from t_start)*1000 AS t, home, away, res, box, ev, log FROM online_games WHERE season_id=$1 AND gid=$2', [sid, gid])).rows[0];
-    if (!row) return null;
+    const pres = { present: m.present, mine: m.mine, canMark: m.canMark };
+    if (!row) return { gid, t: m.slot.t + preOf(S.online), home: m.g.h, away: m.g.a, kind: m.slot.kind, started: false, ...pres };
     const t = Number(row.t), liveMs = S.online.cfg.liveMin * 60e3;
-    if (now < t) return { gid, t, home: row.home, away: row.away, started: false };
+    if (now < t) return { gid, t, home: row.home, away: row.away, kind: row.kind, started: false, ...pres };
     const ticks = JSON.parse(zlib.gunzipSync(row.log).toString());
     const done = now >= t + liveMs;
     const n = done ? ticks.length : Math.min(ticks.length, Math.floor((now - t) / (liveMs / ticks.length)) + 1);
     const lastTick = ticks[n - 1], secNow = lastTick ? (lastTick[0] >= 4 ? 3600 + (lastTick[1] - 180) * 20 : lastTick[1] * 20) : 0;
     const ev = done ? row.ev : (row.ev || []).filter((e) => (e.per - 1) * 1200 + e.s <= secNow);
-    return { gid, t, home: row.home, away: row.away, kind: row.kind, started: true, done, liveMs, total: ticks.length, ticks: ticks.slice(0, n), ev, res: done ? row.res : null, box: done ? row.box : null, rost: row.box && row.box.rost, gk: row.box && row.box.gkId, sty: row.box && row.box.sty };
+    return { gid, t, home: row.home, away: row.away, kind: row.kind, started: true, done, liveMs, total: ticks.length, ticks: ticks.slice(0, n), ev, res: done ? row.res : null, box: done ? row.box : null, rost: row.box && row.box.rost, gk: row.box && row.box.gkId, sty: row.box && row.box.sty, ...pres };
   }
   function team(tid, uid) { if (!S) return null; return teamView(G, S, tid, uid); }
   async function plan(uid, key, p, now = Date.now()) {

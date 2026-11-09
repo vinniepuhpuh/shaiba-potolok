@@ -278,15 +278,19 @@ test('онлайн-сезон: создание, вход, расчёт, тра�
     assert.equal(mk.my.dead, r.json().dead);
     // первый игровой слот
     const first = v.slots[0];
-    assert.equal(await online.tick(first.t - 1000), 0, 'рано');
-    const n = await online.tick(first.t + 1000);
+    // отметка «на арене»: за минуту до начала
+    const myG = first.games.find((g) => g.h === 3 || g.a === 3) || v.slots.flatMap((x) => x.games).find((g) => g.h === 3 || g.a === 3);
+    const pr = await online.game(myG.id, v.slots.find((x) => x.games.includes(myG)).t - 30e3, a.user.id);
+    assert.ok(pr.mine && pr.present && pr.started === false, JSON.stringify(pr));
+    assert.equal(await online.tick(first.t + 30e3), 0, 'первая минута — выход команд');
+    const n = await online.tick(first.t + 61e3);
     assert.equal(n, 4, 'четыре матча в слоте');
     const gid = first.games[0].id;
     // идёт трансляция: результата нет, тиков меньше полного
-    const live = await online.game(gid, first.t + 60e3);
+    const live = await online.game(gid, first.t + 120e3);
     assert.ok(live.started && !live.done && live.res === null);
     assert.ok(live.ticks.length > 0 && live.ticks.length < live.total);
-    const vl = online.view(null, first.t + 60e3);
+    const vl = online.view(null, first.t + 120e3);
     assert.equal(vl.teams.reduce((s, t) => s + t.gp, 0), 0, 'таблица не раскрывает идущие матчи');
     // после окончания
     const fin = await online.game(gid, first.t + 11 * 60e3);

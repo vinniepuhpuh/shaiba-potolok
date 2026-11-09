@@ -17,7 +17,9 @@ export const DEFAULT_CFG = {
   seriesWins: 4,
   deadlineGame: 18,
   growK: 2, // рост молодых за сезон относительно сезона карьеры
-  liveMin: 10, // длительность трансляции матча, минут
+  liveMin: 5, // длительность трансляции матча, минут
+  preSec: 60, // первая минута после начала — выход команд; матч считается в её конце
+  presenceK: 1.02, // поддержка менеджера, пришедшего к началу: чуть выше шансы
   start: null, // 'YYYY-MM-DD' — первый игровой день (МСК); null — завтра
   fastSec: null, // для тестов: секунд между слотами (вместо расписания по часам)
   inactiveDays: 7,
@@ -25,6 +27,8 @@ export const DEFAULT_CFG = {
 
 // молодые: потенциал +6…+9 — по прогону 40 сезонов титулы делятся между профилями примерно поровну
 const YG = [6, 9];
+const PRESENCE_EARLY = 10 * MIN; // «на арене» можно отметиться за 10 минут до начала и в первую минуту
+export const preOf = (o) => (o.cfg.preSec ?? 0) * 1000; // у сезонов, созданных до появления разминки, её нет
 const PROFILES = ['young', 'mixed', 'vet', 'young', 'mixed', 'vet', 'young', 'mixed'];
 export const PROFILE_NAMES = { young: 'Молодая', mixed: 'Смешанная', vet: 'Опытная' };
 
@@ -183,11 +187,12 @@ function growAfterGame(G, S, tids) {
 const RISKT = [0, 1, 3, 5.5, 8, 10];
 function setHooks(G, S, slotIdx) {
   const o = S.online, HK = G.HOOK;
-  HK.lines = {}; HK.tac = {}; HK.sty = {}; HK.pull = {}; HK.human = {};
+  HK.lines = {}; HK.tac = {}; HK.sty = {}; HK.pull = {}; HK.human = {}; HK.boost = {};
   HK.injK = Math.min(1, (o.slots.filter((s) => s.kind === 'reg').length || 82) / 82);
   for (const [tid, h] of Object.entries(o.humans)) {
     if (!h || h.bot) continue;
     HK.human[tid] = true;
+    if (h.present && h.present[slotIdx]) HK.boost[tid] = o.cfg.presenceK ?? 1.02;
     const plan = (h.plans && (h.plans[slotIdx] || h.plans.def)) || {};
     if (plan.sty) HK.sty[tid] = plan.sty;
     if (plan.risk) HK.tac[tid] = RISKT[plan.risk];
@@ -215,7 +220,7 @@ export function runDue(G, S, now = Date.now()) {
   let guard = 0;
   while (guard++ < 200) {
     const slot = o.slots.find((s) => s.games.some((g) => !g.done));
-    if (!slot || slot.t > now) break;
+    if (!slot || slot.t + preOf(o) > now) break;
     G.S = S;
     setHooks(G, S, slot.i);
     const played = [];
@@ -240,7 +245,7 @@ export function runDue(G, S, now = Date.now()) {
       g.done = true;
       g.res = { gh: res.gh, ga: res.ga, ot: !!r.ot, so: !!r.so, yh: res.yh, ya: res.ya };
       played.push(g.h, g.a);
-      out.push({ gid: g.id, slot: slot.i, kind: slot.kind, t: slot.t, h: g.h, a: g.a, res: g.res, box: r.box, ev: r.ev, log: r.log, tac: r.tac });
+      out.push({ gid: g.id, slot: slot.i, kind: slot.kind, t: slot.t + preOf(o), h: g.h, a: g.a, res: g.res, box: r.box, ev: r.ev, log: r.log, tac: r.tac });
     }
     G.ev('bumpChem(ctx())');
     if (slot.kind === 'reg') growAfterGame(G, S, played); // в плей-офф игроки не растут: весь рост — за регулярку
@@ -257,7 +262,7 @@ export function runDue(G, S, now = Date.now()) {
 // ---------- для API ----------
 export function publicView(G, S, now, uid) {
   const o = S.online, cfg = o.cfg;
-  const live = (slot) => now < slot.t + cfg.liveMin * MIN; // результаты ещё идущих матчей не раскрываем
+  const pre = preOf(o), live = (slot) => now < slot.t + pre + cfg.liveMin * MIN; // результаты ещё идущих матчей не раскрываем
   // таблица без результатов идущих матчей
   const tbl = S.teams.map((t) => ({ id: t.id, w: t.w, l: t.l, ot: t.ot, gf: t.gf, ga: t.ga }));
   for (const s of o.slots) {
@@ -280,7 +285,7 @@ export function publicView(G, S, now, uid) {
   });
   const slots = o.slots.map((s) => ({
     i: s.i, t: s.t, kind: s.kind, round: s.round, g: s.g,
-    games: s.games.filter((g) => !g.skip).map((g) => ({ id: g.id, h: g.h, a: g.a, live: g.done && live(s) && now >= s.t, res: g.done && !live(s) ? g.res : null })),
+    games: s.games.filter((g) => !g.skip).map((g) => ({ id: g.id, h: g.h, a: g.a, live: live(s) && now >= s.t, pre: now >= s.t - PRESENCE_EARLY && now < s.t + pre, res: g.done && !live(s) ? g.res : null })),
   }));
   const po = o.po && o.po.rounds.map((r, ri) => r.map((s) => {
     // счёт серии без идущих матчей
@@ -295,7 +300,7 @@ export function publicView(G, S, now, uid) {
   const champ = o.champ != null && champSlot && !live(champSlot) ? o.champ : null;
   let my = null;
   for (const [tid, h] of Object.entries(o.humans)) if (h && h.uid === uid) my = { team: +tid, bot: !!h.bot };
-  return { name: cfg.name, test: !!cfg.test, now, deadlineT: o.deadlineT, canJoin: now < o.deadlineT, liveMin: cfg.liveMin, teams, slots, po, champ, my };
+  return { name: cfg.name, test: !!cfg.test, now, deadlineT: o.deadlineT, canJoin: now < o.deadlineT, liveMin: cfg.liveMin, preSec: pre / 1000, teams, slots, po, champ, my };
 }
 
 export function joinSeason(S, team, uid, name, now = Date.now()) {
@@ -385,4 +390,20 @@ export function setLines(G, S, uid, body, now = Date.now()) {
     h.lines = { f: L.f.map((l) => l.slice()), d: L.d.map((l) => l.slice()), g: L.g.slice() }; h.lmode = null;
   } else { h.lines = null; h.lmode = null; }
   return { ok: true, lines: linesFor(G, S, tid) };
+}
+
+/** Менеджер открыл свой матч к началу: отмечаем присутствие (окно — 10 минут до и первая минута после старта). */
+export function markPresence(S, uid, gid, now = Date.now()) {
+  const o = S.online, slot = o.slots.find((s) => s.games.some((g) => g.id === gid));
+  if (!slot) return { error: 'no_game' };
+  const g = slot.games.find((x) => x.id === gid);
+  const e = Object.entries(o.humans).find(([, h]) => h && h.uid === uid && !h.bot);
+  const pre = preOf(o), win = now >= slot.t - PRESENCE_EARLY && now < slot.t + pre && !g.done;
+  let present = false;
+  if (e && (g.h === +e[0] || g.a === +e[0])) {
+    const h = e[1]; h.present = h.present || {};
+    if (win) { h.present[slot.i] = true; h.lastSeen = now; }
+    present = !!h.present[slot.i];
+  }
+  return { slot, g, present, mine: !!(e && (g.h === +e[0] || g.a === +e[0])), canMark: win };
 }

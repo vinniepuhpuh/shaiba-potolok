@@ -1317,7 +1317,8 @@ function prep(L){
   if(!L.sty)L.sty=[styFor(L.h,L.a),styFor(L.a,L.h)];
   if(L.h===S.user)L.sty[0]=userStyle();if(L.a===S.user)L.sty[1]=userStyle();
   const fh=styFit(L.h,L.sty[0],H.L,M),fa=styFit(L.a,L.sty[1],A.L,M),sm=styMul(L.sty[0],L.sty[1],fh,fa);
-  const gH=1.99*Math.exp(diff*.035)*tf/REG*es*sm[0],gA=1.99*Math.exp(-diff*.035)*tf/REG*es*sm[1];
+  const bH=(HOOK.boost&&HOOK.boost[L.h])||1,bA=(HOOK.boost&&HOOK.boost[L.a])||1; // онлайн: поддержка менеджера, пришедшего к началу матча
+  const gH=1.99*Math.exp(diff*.035)*tf/REG*es*sm[0]*bH/bA,gA=1.99*Math.exp(-diff*.035)*tf/REG*es*sm[1]*bA/bH;
   const sH=Math.max(gH*1.8,22*Math.exp(diff*.02)*Math.sqrt(tf*sm[0])/REG*es),sA=Math.max(gA*1.8,22*Math.exp(-diff*.02)*Math.sqrt(tf*sm[1])/REG*es);
   const pH=clamp(.2*Math.exp((H.pp-A.pk)*.05),.08,.35),pA=clamp(.2*Math.exp((A.pp-H.pk)*.05),.08,.35);
   L.R={g:[gH,gA],s:[sH,sA],pen:[penH/REG,penA/REG],q:[1-Math.pow(1-Math.min(.5,pH*1.12),1/6),1-Math.pow(1-Math.min(.5,pA*1.12),1/6)],diff};
@@ -1946,6 +1947,7 @@ function load(){try{const s=localStorage.getItem(KEY);if(s){const o=JSON.parse(s
 
 /* ---------- changelog ---------- */
 const CHANGES=[
+  {v:'2026-11-09e',d:'9 ноября',t:'Трансляции быстрее, поддержка трибун',items:['Матч онлайн-лиги теперь идёт 5 минут вместо 10: события сменяются вдвое быстрее.','Первая минута после начала — выход команд. Если открыть свой матч за 10 минут до старта или в эту минуту, команда почувствует поддержку и шансы на победу немного вырастут.','На главной вкладке сезона перед матчем появляется кнопка «На арену».']},
   {v:'2026-11-09d',d:'9 ноября',t:'Зарплаты и потолок в обменах',items:['В онлайн-лиге у каждого игрока видна зарплата и оценка контракта: выгодный, по рынку или дорогой.','В обменах показан потолок обоих клубов: сколько свободно сейчас и сколько останется после сделки, а также число игроков.']},
   {v:'2026-11-09c',d:'9 ноября',t:'Рынок в онлайн-лиге',items:['В онлайн-лиге появилась вкладка «Рынок».','Свободные агенты общие на всю лигу: кто первым договорился, того и игрок.','«За рубежом» — личный список: раз в день скаут привозит трёх игроков, которых видите только вы.','Обмены: компьютерные клубы отвечают сразу и соглашаются, если обмен выгоден им на 15–20%. Живым менеджерам предложение уходит на 48 часов — принять или отклонить можно во вкладке «Рынок».','Контракт своего игрока можно расторгнуть в «Состав» → «Игроки»: половина зарплаты остаётся под потолком до конца сезона.']},
   {v:'2026-11-09b',d:'9 ноября',t:'Живые звуки арены',items:['Гол теперь звучит как на стадионе: сирена и рёв трибун.','Настоящий щелчок клюшки при броске, «ох» трибун при штанге и ликование после победы.','Во время трансляции — гул арены вместо музыки. Выключается в меню «⋯» → «Шум трибун».']},
@@ -3463,13 +3465,13 @@ function oPollStart(){if(_oPoll)return;_oPoll=setInterval(()=>{if(U.mode==='care
 const oLiveNow=()=>OL.v&&OL.v.slots.some(s=>s.games.some(g=>g.live));
 /* слоты, в которых играет клуб */
 const oMine=(tid)=>OL.v.slots.filter(s=>s.games.some(g=>g.h===tid||g.a===tid)).map(s=>({s,g:s.games.find(g=>g.h===tid||g.a===tid)}));
-const oState=(s,g)=>g.res?'done':g.live?'live':oNow()>=s.t?'wait':'soon';
+const oState=(s,g)=>g.res?'done':g.live?'live':g.pre?'pre':oNow()>=s.t?'wait':'soon';
 function oStand(){return OL.v.teams.slice().sort((a,b)=>b.pts-a.pts||(b.w-a.w)||((b.gf-b.ga)-(a.gf-a.ga))||b.gf-a.gf);}
 function oRec(t){return t.gp?`${t.w}-${t.l}-${t.ot} · ${t.pts} оч.`:'ещё не играли';}
 function oGameRow(s,g,me){
   const h=oT(g.h),a=oT(g.a),st=oState(s,g),mine=me!=null&&(g.h===me||g.a===me);
-  const mid=st==='done'?`<b class="num">${g.res.gh}:${g.res.ga}</b><small>${g.res.so?'Б':g.res.ot?'ОТ':''}</small>`:st==='live'?'<b class="olive">● LIVE</b>':st==='wait'?'<small>считаем…</small>':`<b class="num">${oHM(s.t)}</b>`;
-  const can=st==='done'||st==='live';
+  const mid=st==='pre'?`<b class="num">${oHM(s.t)}</b><small class="ok">на арену</small>`:st==='done'?`<b class="num">${g.res.gh}:${g.res.ga}</b><small>${g.res.so?'Б':g.res.ot?'ОТ':''}</small>`:st==='live'?'<b class="olive">● LIVE</b>':st==='wait'?'<small>считаем…</small>':`<b class="num">${oHM(s.t)}</b>`;
+  const can=st==='done'||st==='live'||st==='pre';
   return `<button class="ogame${mine?' mine':''}" ${can?`data-a="oWatch" data-id="${g.id}"`:'disabled'}><span class="ot">${badge(h,26)}<span>${h.name}</span></span><span class="om">${mid}</span><span class="ot r"><span>${a.name}</span>${badge(a,26)}</span></button>`;
 }
 function oHeader(){
@@ -3490,7 +3492,7 @@ function oEmpty(){
 function oViewHome(){
   const v=OL.v,my=oMy(),now=oNow();
   let html=`<section class="card"><h2>${v.name}${v.test?'<span class="otag">тест</span>':''}</h2>
-  <p class="small">8 клубов, по 4 матча с каждым соперником, все 8 выходят в плей-офф (серии до 4 побед). Матчи — каждый вечер по расписанию, трансляция идёт ${v.liveMin} минут; результат открывается в конце трансляции.</p>
+  <p class="small">8 клубов, по 4 матча с каждым соперником, все 8 выходят в плей-офф (серии до 4 побед). Матчи — каждый вечер по расписанию, трансляция идёт ${v.liveMin} минут; результат открывается в конце трансляции. Если прийти на свой матч к началу, шансы на победу немного вырастут.</p>
   ${v.test?'<p class="small muted">Тестовый сезон: за него будет отдельная награда, в рейтинг он не идёт.</p>':''}
   <p class="small">${v.canJoin?`Вход открыт до <b>${oWhen(v.deadlineT)}</b>. Потом свободные клубы до конца сезона ведёт компьютер.`:'Вход в сезон закрыт: можно смотреть матчи.'}</p></section>`;
   if(v.champ!=null){const c=oT(v.champ);html+=`<section class="card hl"><h2>Чемпион</h2><div class="orow">${badge(c,52)}<div><b>${c.city} ${c.name}</b><small>${c.human?'менеджер '+oEsc(c.human.name):'под управлением компьютера'}</small></div></div></section>`;}
@@ -3503,7 +3505,8 @@ function oViewHome(){
     if(nx){const o=oT(nx.g.h===my?nx.g.a:nx.g.h),st=oState(nx.s,nx.g),pk=nx.s.i,plan=oPlanOf(pk);
       html+=`<section class="card${st==='live'?' hl':''}"><h2>${st==='live'?'Идёт матч':'Следующий матч'}<span>${st==='live'?'':oWhen(nx.s.t)}</span></h2>${oGameRow(nx.s,nx.g,my)}
       <p class="small">${nx.g.h===my?'Дома':'В гостях'} против «${o.name}»${o.human?` (менеджер ${oEsc(o.human.name)})`:''}. Любимый стиль соперника: <b>${o.sty&&STY[o.sty]?STY[o.sty].n:'не известен'}</b>.</p>
-      ${st==='soon'?`<p class="small muted">План на матч: ${oPlanTxt(plan)}.</p><button class="btn" data-a="oPlanFor" data-id="${pk}">Тактика на этот матч</button>`:''}</section>`;}
+      ${st==='pre'||(st==='live'&&!nx.g.res&&oNow()<nx.s.t+(OL.v.preSec||0)*1000)?`<p class="small">Приходите на арену к началу: если открыть матч за 10 минут до старта или в первую минуту, команда почувствует поддержку и шансы на победу немного вырастут.</p><button class="btn pri" data-a="oWatch" data-id="${nx.g.id}">На арену</button>`:''}
+      ${st==='soon'||st==='pre'?`<p class="small muted">План на матч: ${oPlanTxt(plan)}.</p><button class="btn" data-a="oPlanFor" data-id="${pk}">Тактика на этот матч</button>`:''}</section>`;}
   }
   const live=v.slots.filter(s=>s.games.some(g=>g.live)),nxt=v.slots.find(s=>s.t>now),near=live.length?live:nxt?[nxt]:[];
   if(near.length)html+=`<section class="card"><h2>${live.length?'Сейчас идут':'Ближайшие матчи'}<span>${live.length?'':oWhen(near[0].t)}</span></h2><div class="ogames">${near.map(s=>s.games.map(g=>oGameRow(s,g,my)).join('')).join('')}</div><button class="btn sm" data-a="oTab" data-id="games">Всё расписание</button></section>`;
@@ -3648,7 +3651,13 @@ function oSetOS(d){
 async function oWatch(gid){
   oStop();
   let d;try{d=await oGet('/api/online/game/'+gid);}catch(e){toast('Нет связи.');return;}
-  if(!d||!d.started){toast('Матч ещё не начался.');return;}
+  if(!d){toast('Матч не найден.');return;}
+  if(!d.started){
+    OL.gm={gid,d,L:oNewL(d),i:0,mode:'pre',spd:0};oSetOS(d);aniReset();render();
+    if(d.mine&&d.present)toast('Вы на арене: команда чувствует поддержку!');
+    OL.gm.timer=setInterval(()=>{const G=OL.gm;if(!G||G.mode!=='pre'){return;}const left=G.d.t-oNow();const el=document.getElementById('ocd');if(el)el.textContent=left>0?mmss(Math.ceil(left/1000)):'0:00';if(left<-2500){oWatch(G.gid);}},1000);
+    return;
+  }
   OL.gm={gid,d,L:oNewL(d),i:0,mode:d.done?'menu':'live',spd:0,seg:'feed',fetchAt:Date.now()};
   oSetOS(d);aniReset();
   if(OL.gm.mode==='live'){const n=d.ticks.length;for(let i=0;i<n-1;i++)oApply(OL.gm,d.ticks[i]);OL.gm.i=Math.max(0,n-1);oStep(true);}
@@ -3698,10 +3707,14 @@ function oRecLoop(){const G=OL.gm;if(!G||G.mode!=='rec'){oStop();return;}if(!oSt
 function oRecStart(){ambStart();const G=OL.gm;oStop();G.mode='rec';G.L=oNewL(G.d);G.i=0;aniReset();G.timer=setInterval(oRecLoop,SPD[G.spd]);render();}
 function oMatchView(){
   const G=OL.gm,L=G.L,d=G.d,h=oT(d.home),a=oT(d.away);
-  const final=G.mode==='menu'||G.mode==='box'||G.mode==='end';
+  const final=G.mode==='menu'||G.mode==='box'||G.mode==='end',preM=G.mode==='pre';
   const sc=final&&d.res?[d.res.gh,d.res.ga]:L.sc;
   let body='';
-  if(G.mode==='menu')body=`<section class="card"><h2>Матч завершён<span>${d.res.gh}:${d.res.ga}${d.res.so?' Б':d.res.ot?' ОТ':''}</span></h2><div class="btn-row"><button class="btn pri" data-a="oRec">Смотреть запись</button><button class="btn" data-a="oBox">Протокол</button></div></section>`;
+  if(G.mode==='pre'){const left=Math.max(0,Math.ceil((d.t-oNow())/1000)),before=oNow()<d.t-(OL.v?OL.v.preSec||0:0)*1000;
+    body=`<section class="card hl"><h2>${before?'До начала матча':'Выход команд'}<span id="ocd">${mmss(left)}</span></h2>
+    ${d.mine?(d.present?'<p class="small ok"><b>Вы на арене.</b> Команда чувствует поддержку: шансы на победу в этом матче немного выше.</p>':'<p class="small">Вы пришли после первой минуты — поддержка уже не засчитается. В следующий раз откройте матч до начала или в первую минуту.</p>'):'<p class="small">Трансляция начнётся автоматически.</p>'}
+    <p class="small muted">Матч длится ${OL.v?OL.v.liveMin:5} минут, результат откроется в конце трансляции.</p></section>`;}
+  else if(G.mode==='menu')body=`<section class="card"><h2>Матч завершён<span>${d.res.gh}:${d.res.ga}${d.res.so?' Б':d.res.ot?' ОТ':''}</span></h2><div class="btn-row"><button class="btn pri" data-a="oRec">Смотреть запись</button><button class="btn" data-a="oBox">Протокол</button></div></section>`;
   else if(G.mode==='box')body=`<button class="btn sm" data-a="oRec">Смотреть запись</button><div class="stack">${withOS(()=>boxView(Object.assign({},d.box,{d:d.kind==='po'?'плей-офф':'регулярка'}),false))}</div>`;
   else{
     const ctl=G.mode==='rec'?`<div class="mv-ctl"><button class="btn sm" data-a="oPP">${G.timer?'❚❚ Пауза':'▶ Смотреть'}</button><button class="btn sm" data-a="oSpd">Скорость ×${[1,2,4][G.spd]}</button><button class="btn sm" data-a="oBox">К протоколу</button></div>`:G.mode==='live'?`<p class="small muted center">Прямая трансляция: матч идёт ${OL.v?OL.v.liveMin:10} минут. Счёт и события появляются по ходу игры.</p>`:'';
@@ -3709,7 +3722,7 @@ function oMatchView(){
     body=`<div class="rink">${withOS(()=>rinkSVG(L))}</div>${ctl}${endc}<section class="card"><div id="ofeed">${withOS(()=>feedHTML(L.ev,L.h,L.a))}</div></section>`;
   }
   return `<div class="mv" id="mv" role="dialog" aria-label="Матч">
-  <div class="mv-board gut"><div class="sb"><div class="sb-t">${badge(h,52)}</div><div class="sb-sc"><b id="sc0">${sc[0]}</b><i>:</i><b id="sc1">${sc[1]}</b></div><div class="sb-t r">${badge(a,52)}</div></div><div class="sb-sub" id="mv-clock">${final?`Финал${d.res&&d.res.so?' · по буллитам':d.res&&d.res.ot?' · в овертайме':''}`:oClock(G)}</div></div><div id="gpop" class="gpop" hidden></div>
+  <div class="mv-board gut"><div class="sb"><div class="sb-t">${badge(h,52)}</div><div class="sb-sc"><b id="sc0">${sc[0]}</b><i>:</i><b id="sc1">${sc[1]}</b></div><div class="sb-t r">${badge(a,52)}</div></div><div class="sb-sub" id="mv-clock">${preM?'Скоро начало':final?`Финал${d.res&&d.res.so?' · по буллитам':d.res&&d.res.ot?' · в овертайме':''}`:oClock(G)}</div></div><div id="gpop" class="gpop" hidden></div>
   <div class="gut mv-body"><div class="btn-row"><button class="btn sm" data-a="oClose">← Назад</button></div><div id="mv-info" class="stack">${body}</div></div></div>`;
 }
 /* ---------- экран ---------- */
@@ -3734,7 +3747,7 @@ function renderOnline(){
   const sh2=document.querySelector('.sheet');if(sh2&&U.keepSheet)sh2.scrollTop=shy;U.keepSheet=false;
   const mv2=document.getElementById('mv');if(mv2)mv2.scrollTop=my;
   document.body.style.overflow=mvOn?'hidden':'';
-  if(mvOn&&OL.gm.mode!=='menu'&&OL.gm.mode!=='box'){aniStart();withOS(()=>dotLabels(OL.gm.L));}
+  if(mvOn&&OL.gm.mode!=='menu'&&OL.gm.mode!=='box'&&OL.gm.mode!=='pre'){aniStart();withOS(()=>dotLabels(OL.gm.L));}
   tgSync();
   if(U.tour)requestAnimationFrame(tourPlace);
 }
@@ -3742,7 +3755,7 @@ const OTOUR=[
   {title:'Онлайн-лига',text:'Здесь клубы ведут живые менеджеры, а не компьютер. Матчи идут по расписанию на сервере, даже когда вы не в игре. Покажу, чем это отличается от карьеры.',first:true},
   {tab:'home',t:'o-mode',title:'Главное меню',text:'Домик возвращает в главное меню: там переключаются режимы. Карьера сохраняется как была — можно играть и там, и тут.'},
   {tab:'home',t:'o-club',title:'Свой клуб',text:'Клуб выбирают до дедлайна, один на сезон. Зарплаты у всех клубов уравнены, а профиль показывает, как клуб будет меняться: молодая команда к плей-офф растёт, опытная сильна сразу, но к концу немного сдаёт.'},
-  {tab:'games',t:'o-games',title:'Расписание и трансляции',text:'Матчи каждый вечер в одно и то же время. Во время матча горит LIVE: нажмите — откроется прямая трансляция. Счёт держится в секрете до её конца, даже в таблице. Потом матч можно посмотреть в записи или открыть протокол.'},
+  {tab:'games',t:'o-games',title:'Расписание и трансляции',text:'Матчи каждый вечер в одно и то же время. Во время матча горит LIVE: нажмите — откроется прямая трансляция. Откройте свой матч за 10 минут до начала или в первую минуту — команда почувствует поддержку, шансы чуть вырастут. Счёт держится в секрете до её конца, даже в таблице. Потом матч можно посмотреть в записи или открыть протокол.'},
   {tab:'roster',rs:'plan',t:'o-plan',title:'План на матч',text:'Во время матча вы не можете вмешаться, поэтому тактику задают заранее. «По умолчанию» действует на все игры, а на любой ближайший матч можно поставить свой план — например, стиль, который бьёт любимый стиль соперника. «Авто» — решает компьютер.'},
   {tab:'roster',rs:'lines',t:'o-lines',title:'Звенья',text:'Соберите звенья кнопками или вручную: нажмите на игрока, затем на место. Если кто-то травмируется, сервер сам поставит замену.'},
   {tab:'market',t:'o-market',title:'Рынок',text:'Свободные агенты — общие на всю лигу: кто первым договорился, того и игрок. «За рубежом» — личный список: раз в день скаут привозит трёх игроков, которых видите только вы. Обмены с компьютером проходят, если им выгодно на 15–20%, а живому менеджеру предложение уходит на 48 часов.'},
