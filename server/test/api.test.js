@@ -244,9 +244,14 @@ test('онлайн-сезон: создание, вход, расчёт, тра�
     const best5 = t5.players.filter((p) => p.pos !== 'G').sort((a, b) => b.ovr - a.ovr)[0];
     r = await oapp.inject({ method: 'POST', url: '/api/online/trade/eval', headers: H, payload: { to: 5, give: [], get: [best5.id] } });
     assert.equal(r.json().deal, false);
-    const best3 = t3.players.filter((p) => p.pos !== 'G').sort((a, b) => b.ovr - a.ovr)[0];
-    const room5 = mk.cap - t5.players.filter((p) => p.yrs > 0).reduce((x, p) => x + p.sal, 0);
-    const weak5 = t5.players.filter((p) => p.pos !== 'G' && p.ovr <= best3.ovr - 6 && best3.sal - p.sal <= room5).sort((a, b) => b.sal - a.sal)[0];
+    const sumSal = (ps) => ps.filter((p) => p.yrs > 0).reduce((x, p) => x + p.sal, 0);
+    const room5 = mk.cap - sumSal(t5.players), room3 = mk.cap - sumSal(t3.players);
+    let best3 = null, weak5 = null;
+    for (const g of t3.players.filter((p) => p.pos !== 'G').sort((a, b) => b.ovr - a.ovr)) {
+      const c = t5.players.filter((p) => p.pos !== 'G' && p.ovr <= g.ovr - 8 && g.sal - p.sal <= room5 && p.sal - g.sal <= room3).sort((a, b) => b.sal - a.sal)[0];
+      if (c) { best3 = g; weak5 = c; break; }
+    }
+    assert.ok(best3, 'нашлась пара для обмена');
     r = await oapp.inject({ method: 'POST', url: '/api/online/trade', headers: H, payload: { to: 5, give: [best3.id], get: [weak5.id] } });
     assert.equal(r.json().accepted, true, r.body);
     // обмен с человеком: предложение → принятие
