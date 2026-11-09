@@ -15,7 +15,7 @@ g=$(sha1sum www/index.html | cut -d' ' -f1)
 if [ "$g" != "$(cat .game.sha 2>/dev/null)" ]; then docker compose restart api; echo "$g" > .game.sha; fi
 docker image prune -f >/dev/null
 for i in $(seq 1 30); do
-  if docker compose exec -T api wget -qO- http://127.0.0.1:3000/api/health >/dev/null 2>&1; then echo "deploy ok: $(git rev-parse --short HEAD)"; exit 0; fi
+  if docker compose exec -T api wget -qO- http://127.0.0.1:3000/api/health >/dev/null 2>&1; then echo "deploy ok: $(git rev-parse --short HEAD)"; sleep 5; docker compose logs --tail 60 api | grep -E "webhook|menu button|online:|error" | tail -8 || true; exit 0; fi
   sleep 2
 done
 echo "api не ответил после обновления"; docker compose logs --tail 40 api; exit 1
