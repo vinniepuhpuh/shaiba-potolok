@@ -57,6 +57,9 @@ if (cfg.webhookPath && (cfg.publicUrl || cfg.webhookVia !== 'direct')) {
     allowed_updates: ['message', 'pre_checkout_query'],
   }).then(() => app.log.info('webhook set')).catch((e) => app.log.warn(`webhook not set: ${e.message}`));
 }
+// Кнопка «Играть» слева от поля ввода в боте: всегда ведёт на актуальный адрес игры
+tg(cfg, 'setChatMenuButton', { menu_button: { type: 'web_app', text: 'Играть', web_app: { url: cfg.gameUrl } } })
+  .then(() => app.log.info(`menu button: ${cfg.gameUrl}`)).catch((e) => app.log.warn(`menu button not set: ${e.message}`));
 
 const stop = async () => { await app.close(); await pool.end(); process.exit(0); };
 process.on('SIGTERM', stop);

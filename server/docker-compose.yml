@@ -21,7 +21,7 @@ services:
     environment:
       DATABASE_URL: postgres://gm:${DB_PASSWORD}@db:5432/gm
       PUBLIC_URL: https://${DOMAIN}
-      GAME_URL: https://${DOMAIN}
+      GAME_URL: ${GAME_URL:-https://gmhockey.ru}
       GAME_HTML: /app/www/index.html
     volumes:
       - ./www:/app/www:ro
