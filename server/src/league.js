@@ -2,6 +2,8 @@
  * Онлайн-лига: создание сезона, расписание, расчёт матчей по времени, плей-офф.
  * Состояние сезона — объект S игры (как в карьере) с полем S.online; движок берётся из кода игры (engine.js).
  */
+import { ensureFin, finGame } from './fin.js';
+import { assignDerby, markDerby, derbyTable } from './awards.js';
 
 const H = 3600e3, MIN = 60e3;
 const MSK = 3 * H; // Москва UTC+3 круглый год
@@ -118,6 +120,9 @@ export function createSeason(G, cfgIn, now = Date.now()) {
     regDays: Math.ceil(slots.length / cfg.regTimes.length),
     deadlineT: slots[Math.min(cfg.deadlineGame, slots.length) - 1].t,
   };
+  ensureFin(S);
+  assignDerby(S);
+  markDerby(S.online);
   return S;
 }
 
@@ -134,6 +139,7 @@ function buildPlayoffRound(G, S, teamsOrder, round, startT) {
   }
   o.po = o.po || { rounds: [] };
   o.po.rounds.push(series);
+  markDerby(o);
 }
 
 function maybeAdvancePlayoffs(G, S, lastT) {
@@ -187,6 +193,7 @@ function growAfterGame(G, S, tids) {
 const RISKT = [0, 1, 3, 5.5, 8, 10];
 function setHooks(G, S, slotIdx) {
   const o = S.online, HK = G.HOOK;
+  S.chem = {}; // в онлайне нет сыгранности за матчи вместе: только бонус за связку ролей
   HK.lines = {}; HK.tac = {}; HK.sty = {}; HK.pull = {}; HK.human = {}; HK.boost = {};
   HK.injK = Math.min(1, (o.slots.filter((s) => s.kind === 'reg').length || 82) / 82);
   for (const [tid, h] of Object.entries(o.humans)) {
@@ -232,6 +239,7 @@ export function runDue(G, S, now = Date.now()) {
       }
       const r = playGame(G, S, g, slot.kind === 'reg' ? 'reg' : 'po');
       const res = r.res, H = S.teams[g.h], A = S.teams[g.a];
+      finGame(S, g, slot.kind, g.derby, res); // деньги за матч — по таблице до этого результата
       if (slot.kind === 'reg') {
         H.gf += res.gh; H.ga += res.ga; A.gf += res.ga; A.ga += res.gh;
         if (res.gh > res.ga) { H.w++; res.ot ? A.ot++ : A.l++; } else { A.w++; res.ot ? H.ot++ : H.l++; }
@@ -247,7 +255,6 @@ export function runDue(G, S, now = Date.now()) {
       played.push(g.h, g.a);
       out.push({ gid: g.id, slot: slot.i, kind: slot.kind, t: slot.t + preOf(o), h: g.h, a: g.a, res: g.res, box: r.box, ev: r.ev, log: r.log, tac: r.tac });
     }
-    G.ev('bumpChem(ctx())');
     if (slot.kind === 'reg') growAfterGame(G, S, played); // в плей-офф игроки не растут: весь рост — за регулярку
     G.ev('healDay();aiCover();inv()');
     // неактивные люди: через N дней без заходов клуб переходит боту
@@ -275,6 +282,7 @@ export function publicView(G, S, now, uid) {
     }
   }
   const strength = G.ev('allR')();
+  const dt = derbyTable(S, live);
   // стили последних сыгранных матчей (без идущих трансляций), новые первыми
   const recSty = S.teams.map(() => []);
   for (let i = o.slots.length - 1; i >= 0; i--) {
@@ -291,13 +299,14 @@ export function publicView(G, S, now, uid) {
     const h = o.humans[t.id];
     const x = tbl[t.id];
     return { id: t.id, city: t.city, name: t.name, ab: t.ab, lg: t.lg, c1: t.c1, c2: t.c2, own: t.own, profile: t.profile,
+      rival: o.derby ? o.derby[t.id] ?? null : null, dw: dt[t.id] ? dt[t.id].w : 0, dgp: dt[t.id] ? dt[t.id].gp : 0,
       str: Math.round(strength[t.id].t * 10) / 10, sty: (h && !h.bot ? favOf(recSty[t.id]) : t.sty) || null, styL: recSty[t.id].slice(0, 5),
       human: h && !h.bot ? { name: h.name || 'Менеджер' } : null,
       w: x.w, l: x.l, ot: x.ot, gf: x.gf, ga: x.ga, pts: x.w * 2 + x.ot, gp: x.w + x.l + x.ot };
   });
   const slots = o.slots.map((s) => ({
     i: s.i, t: s.t, kind: s.kind, round: s.round, g: s.g,
-    games: s.games.filter((g) => !g.skip).map((g) => ({ id: g.id, h: g.h, a: g.a, live: live(s) && now >= s.t, pre: now >= s.t - PRESENCE_EARLY && now < s.t + pre, res: g.done && !live(s) ? g.res : null })),
+    games: s.games.filter((g) => !g.skip).map((g) => ({ id: g.id, h: g.h, a: g.a, derby: !!g.derby, live: live(s) && now >= s.t, pre: now >= s.t - PRESENCE_EARLY && now < s.t + pre, res: g.done && !live(s) ? g.res : null })),
   }));
   const po = o.po && o.po.rounds.map((r, ri) => r.map((s) => {
     // счёт серии без идущих матчей
@@ -312,7 +321,12 @@ export function publicView(G, S, now, uid) {
   const champ = o.champ != null && champSlot && !live(champSlot) ? o.champ : null;
   let my = null;
   for (const [tid, h] of Object.entries(o.humans)) if (h && h.uid === uid) my = { team: +tid, bot: !!h.bot };
-  return { name: cfg.name, test: !!cfg.test, now, deadlineT: o.deadlineT, canJoin: now < o.deadlineT, liveMin: cfg.liveMin, preSec: pre / 1000, teams, slots, po, champ, my };
+  // итоги и награды — только когда финал показан целиком
+  const R = champ != null && o.results ? o.results : null;
+  const noUid = (x) => { if (!x) return x; const { uid: _u, ...rest } = x; return rest; };
+  const results = R && { test: R.test, champ: R.champ, rows: R.rows.map(noUid),
+    awards: { ...R.awards, genius: noUid(R.awards.genius), derby: noUid(R.awards.derby) } };
+  return { name: cfg.name, test: !!cfg.test, now, deadlineT: o.deadlineT, canJoin: now < o.deadlineT, liveMin: cfg.liveMin, preSec: pre / 1000, teams, slots, po, champ, results, my };
 }
 
 export function joinSeason(S, team, uid, name, now = Date.now()) {
@@ -330,10 +344,10 @@ export function joinSeason(S, team, uid, name, now = Date.now()) {
 }
 
 // ---------- клуб для экрана «Состав» ----------
-const LMODES = ['best', 'combo', 'keep'];
+const LMODES = ['best', 'combo', 'keep']; // 'keep' остаётся для старых клиентов; без сыгранности он равен «Сильнейшим»
 function linesFor(G, S, tid) {
   const h = S.online.humans[tid];
-  G.S = S; G.HOOK.lines = {};
+  G.S = S; G.HOOK.lines = {}; S.chem = {};
   if (h && !h.bot && h.lines) {
     return G.ev('(L,tid)=>{const act=new Set(healthy(tid).map(p=>p.id)),seen=new Set();const ok=id=>{if(id==null||!act.has(id)||seen.has(id))return null;seen.add(id);return id;};const C={f:L.f.map(l=>l.map(ok)),d:L.d.map(l=>l.map(ok)),g:L.g.map(ok)};fillLines(C,healthy(tid));return C;}')(h.lines, tid);
   }

@@ -4,6 +4,9 @@ import crypto from 'node:crypto';
 
 const MAX_ROSTER = 26, MIN_ROSTER = 20, BOT_PREMIUM = 1.18; // компьютер хочет +15–20% к ценности
 const TRADE_TTL = 48 * 3600e3;
+// Расторжение в онлайне: первые FREE_RELEASES за сезон бесплатны, дальше половина зарплаты под потолком.
+// Своего расторгнутого не вернуть до конца сезона; другим людям он недоступен REL_LOCK (боты — сразу).
+const FREE_RELEASES = 3, REL_LOCK = 24 * 3600e3;
 
 function humanOf(S, uid) {
   const e = Object.entries(S.online.humans).find(([, h]) => h && h.uid === uid && !h.bot);
@@ -20,10 +23,18 @@ export function marketTimes(S) {
 }
 function ensure(S) {
   const o = S.online;
-  o.dead = o.dead || {}; o.trades = o.trades || []; o.os = o.os || {}; o.mlog = o.mlog || [];
+  o.dead = o.dead || {}; o.rel = o.rel || {}; o.trades = o.trades || []; o.os = o.os || {}; o.mlog = o.mlog || [];
   return o;
 }
 const deadOf = (S, tid) => ensure(S).dead[tid] || 0;
+const freeLeft = (S, tid) => Math.max(0, FREE_RELEASES - (ensure(S).rel[tid] || 0));
+// Почему человек из клуба tid не может подписать агента p сейчас (или null)
+function relBlock(p, tid, now) {
+  const r = p.orel; if (!r) return null;
+  if (r.tid === tid) return 'released_by_you';
+  if (now - r.t < REL_LOCK) return 'released_lock';
+  return null;
+}
 const pay = (G, S, tid) => G.ev('payroll')(tid) + deadOf(S, tid);
 const roster = (S, tid) => S.players.filter((p) => p.team === tid && p.yrs > 0);
 const goalies = (S, tid) => roster(S, tid).filter((p) => p.pos === 'G').length;
@@ -46,19 +57,21 @@ export function marketView(G, S, uid, now = Date.now()) {
   const me = humanOf(S, uid), { tradeT, faT } = marketTimes(S);
   const open = { trade: !o.po && now < tradeT, fa: !o.po && now < faT };
   const fa = S.players.filter((p) => p.team === -1).sort((a, b) => b.ovr - a.ovr).slice(0, 80)
-    .map((p) => pub(p, { ask: p.ask, askY: p.askY, pat: me ? ((p.opat || {})[me.tid] ?? 100) : null }));
+    .map((p) => pub(p, { ask: p.ask, askY: p.askY, pat: me ? ((p.opat || {})[me.tid] ?? 100) : null,
+      rel: p.orel ? (me && p.orel.tid === me.tid ? 'mine' : now - p.orel.t < REL_LOCK ? 'lock' : null) : null,
+      relT: p.orel && now - p.orel.t < REL_LOCK ? p.orel.t + REL_LOCK : null }));
   let my = null;
   if (me) {
     const os = S.players.filter((p) => p.team === -4 && p.osTid === me.tid).map((p) => pub(p, { osSal: p.osSal, osY: p.osY }));
     const mine = (tr) => tr.from === me.tid || tr.to === me.tid;
     my = {
-      team: me.tid, cap: S.cap, pay: pay(G, S, me.tid), dead: deadOf(S, me.tid), n: roster(S, me.tid).length,
+      team: me.tid, cap: S.cap, pay: pay(G, S, me.tid), dead: deadOf(S, me.tid), freeRel: freeLeft(S, me.tid), n: roster(S, me.tid).length,
       os, osDay: (o.os[me.tid] || {}).day || null, osToday: (o.os[me.tid] || {}).day === mskDay(now),
       trades: o.trades.filter((tr) => mine(tr) && (tr.status === 'open' || now - tr.t < 3 * 864e5)).map((tr) => tradePub(S, tr)),
     };
   }
-  return { open, tradeT, faT, cap: S.cap, minSal: G.ev('minSal')(), maxSal: G.ev('maxSal')(), maxRoster: MAX_ROSTER, minRoster: MIN_ROSTER,
-    premium: BOT_PREMIUM, fa, my, log: o.mlog.slice(0, 20) };
+  return { open, tradeT, faT, cap: S.cap, cap0: o.cap0 ?? null, capDaily: o.cfg.capDaily ?? CAP_DAILY, minSal: G.ev('minSal')(), maxSal: G.ev('maxSal')(), maxRoster: MAX_ROSTER, minRoster: MIN_ROSTER,
+    premium: BOT_PREMIUM, freeReleases: FREE_RELEASES, fa, my, log: o.mlog.slice(0, 20) };
 }
 const mskDay = (t) => new Date(t + 3 * 3600e3).toISOString().slice(0, 10);
 function tradePub(S, tr) {
@@ -73,8 +86,12 @@ export function signFA(G, S, uid, { id, sal, yrs }, now = Date.now()) {
   if (o.po || now >= marketTimes(S).faT) return { error: 'market_closed' };
   const p = S.players.find((x) => x.id === Number(id));
   if (!p || p.team !== -1) return { error: 'gone' };
-  sal = Math.round(Number(sal) / 10) * 10; yrs = Math.round(Number(yrs));
-  if (!(yrs >= 1 && yrs <= 5)) return { error: 'bad_offer' };
+  const blk = relBlock(p, me.tid, now); if (blk) return { error: blk };
+  // срок в онлайне не показываем: игрок получает желаемый срок, без штрафа к согласию (сезон всё равно один)
+  sal = Math.round(Number(sal) / 10) * 10;
+  const want = yrs == null ? (p.askY || 1) : Math.round(Number(yrs));
+  if (!(want >= 1 && want <= 8)) return { error: 'bad_offer' };
+  yrs = want;
   if (!(sal >= G.ev('minSal')() && sal <= G.ev('maxSal')())) return { error: 'bad_offer' };
   if (roster(S, me.tid).length >= MAX_ROSTER) return { error: 'roster_full' };
   if (pay(G, S, me.tid) + sal > S.cap) return { error: 'cap' };
@@ -130,7 +147,7 @@ export function signOS(G, S, uid, { id }, now = Date.now()) {
   return { ok: true, player: p.id };
 }
 
-// ---------- расторжение: половина зарплаты остаётся под потолком до конца сезона ----------
+// ---------- расторжение: первые FREE_RELEASES бесплатны, дальше половина зарплаты под потолком до конца сезона ----------
 export function releasePlayer(G, S, uid, { id }, now = Date.now()) {
   const o = ensure(S); G.S = S;
   const me = humanOf(S, uid); if (!me) return { error: 'not_joined' };
@@ -138,12 +155,14 @@ export function releasePlayer(G, S, uid, { id }, now = Date.now()) {
   if (!p || p.team !== me.tid) return { error: 'gone' };
   if (roster(S, me.tid).length <= MIN_ROSTER) return { error: 'roster_min' };
   if (p.pos === 'G' && goalies(S, me.tid) <= 2) return { error: 'goalies' };
-  const dead = G.ev('rs')(p.sal * 0.5);
+  const free = freeLeft(S, me.tid) > 0;
+  const dead = free ? 0 : G.ev('rs')(p.sal * 0.5);
+  o.rel[me.tid] = (o.rel[me.tid] || 0) + 1;
   o.dead[me.tid] = deadOf(S, me.tid) + dead;
-  G.ev('toFA')(p); G.ev('inv()');
+  G.ev('toFA')(p); p.orel = { tid: me.tid, t: now }; G.ev('inv()');
   const h = me.h; if (h.lines) h.lines = null, h.lmode = null; // звенья пересоберутся
   log(S, `«${S.teams[me.tid].name}» расторгли контракт с ${nm(p)}`, now);
-  return { ok: true, dead };
+  return { ok: true, dead, free, freeRel: freeLeft(S, me.tid) };
 }
 
 // ---------- обмены ----------
@@ -228,8 +247,23 @@ export function answerTrade(G, S, uid, id, action, now = Date.now()) {
   return { ok: true };
 }
 /** Вызывается при каждом расчёте: просроченные предложения, обмены после дедлайна. */
+// Потолок зарплат растёт каждые сутки (в полночь по Москве), пока открыт рынок свободных агентов
+export const CAP_DAILY = 1000; // $1M в тысячах
+function capGrow(S, now) {
+  const o = S.online, { faT } = marketTimes(S), day = mskDay(Math.min(now, faT));
+  // отсчёт — с первого игрового дня; у уже идущего сезона — с сегодняшнего (без роста задним числом)
+  if (o.capDay == null) { const t1 = o.slots[0].t; o.capDay = mskDay(now >= t1 ? now : t1); o.cap0 = o.cap0 ?? S.cap; }
+  if (o.po || o.champ != null || day <= o.capDay) return 0;
+  const n = Math.round((Date.parse(day) - Date.parse(o.capDay)) / 864e5);
+  if (n <= 0) return 0;
+  const step = o.cfg.capDaily ?? CAP_DAILY;
+  S.cap += n * step; o.capDay = day;
+  log(S, `Потолок зарплат вырос на ${step * n / 1000 >= 1 ? '$' + (step * n / 1000) + 'M' : step * n}: теперь $${(S.cap / 1000).toFixed(1)}M`, now);
+  return n;
+}
 export function marketTick(S, now = Date.now()) {
   const o = ensure(S), { tradeT } = marketTimes(S);
+  capGrow(S, now);
   for (const tr of o.trades) if (tr.status === 'open' && (now > tr.exp || now >= tradeT || o.po)) tr.status = 'expired';
   if (o.trades.length > 300) o.trades = o.trades.filter((tr) => tr.status === 'open' || now - tr.t < 7 * 864e5);
 }

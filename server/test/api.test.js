@@ -21,7 +21,7 @@ const initFor = (id, extra = {}) =>
 
 before(async () => {
   pool = makePool(url);
-  await pool.query('DROP TABLE IF EXISTS online_games, online_seasons, link_codes, devices, events, saves, users, _migrations CASCADE');
+  await pool.query('DROP TABLE IF EXISTS online_results, online_games, online_seasons, link_codes, devices, events, saves, users, _migrations CASCADE');
   await migrate(pool, { info() {} });
   app = buildApp({ pool, cfg, logger: false });
   await app.ready();
@@ -172,6 +172,35 @@ test('приложение: вход по устройству и привязк
   assert.equal(r.headers['access-control-allow-origin'], 'https://localhost');
 });
 
+test('онлайн: потолок растёт на $1M в сутки, рейтинг с затуханием', async () => {
+  const { loadGame } = await import('../src/engine.js');
+  const { createSeason } = await import('../src/league.js');
+  const { marketTick } = await import('../src/market.js');
+  const { ratingFrom } = await import('../src/awards.js');
+  const html = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../index.html');
+  const G = loadGame(html);
+  const S = createSeason(G, { start: '2026-12-01' }, Date.parse('2026-11-30T10:00:00Z'));
+  const cap0 = S.cap, t1 = S.online.slots[0].t;
+  marketTick(S, t1 - 3600e3);
+  assert.equal(S.cap, cap0, 'до начала сезона не растёт');
+  marketTick(S, t1 + 3600e3);
+  assert.equal(S.cap, cap0, 'в первый день — без роста');
+  marketTick(S, t1 + 2 * 864e5);
+  assert.equal(S.cap, cap0 + 2000, 'через двое суток +$2M');
+  marketTick(S, t1 + 2 * 864e5 + 3600e3);
+  assert.equal(S.cap, cap0 + 2000, 'в течение суток один раз');
+  marketTick(S, t1 + 60 * 864e5);
+  const faDays = Math.round((Date.parse(new Date(S.online.slots.filter((x) => x.kind === 'reg').pop().t + 3 * 3600e3).toISOString().slice(0, 10)) - Date.parse('2026-12-01')) / 864e5);
+  assert.equal(S.cap, cap0 + faDays * 1000, 'после закрытия рынка агентов не растёт');
+  const rows = [
+    { uid: 1, name: 'A', test: false, points: 30, awards: ['champ'] }, { uid: 2, name: 'B', test: false, points: 40, awards: [] },
+    { uid: 1, name: 'A', test: false, points: 30, awards: ['genius'] }, { uid: 2, name: 'B', test: true, points: 99, awards: [] },
+  ];
+  const r = ratingFrom(rows);
+  assert.equal(r[0].uid, 1); assert.equal(r[0].pts, 55.5); assert.equal(r[0].champs, 1); assert.equal(r[0].awards, 1);
+  assert.equal(r[1].pts, 40, 'тестовый сезон не считается');
+});
+
 test('онлайн-сезон: создание, вход, расчёт, трансляция', async () => {
   const html = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../index.html');
   const online = makeOnline(pool, html, { info() {}, error() {} });
@@ -271,11 +300,52 @@ test('онлайн-сезон: создание, вход, расчёт, тра�
     const t6b = (await oapp.inject({ method: 'GET', url: '/api/online/team/6', headers: H2 })).json();
     assert.ok(t6b.players.some((p) => p.id === a3.id));
     // расторжение
-    const cut = t6b.players.filter((p) => p.pos !== 'G').sort((a, b) => a.ovr - b.ovr)[0];
+    const cut = t6b.players.filter((p) => p.pos !== 'G').sort((a, b) => b.ovr - a.ovr)[0]; // сильнейший — точно в списке агентов
     r = await oapp.inject({ method: 'POST', url: '/api/online/release', headers: H2, payload: { id: cut.id } });
-    assert.ok(r.json().ok && r.json().dead > 0, r.body);
+    assert.ok(r.json().ok && r.json().free && r.json().dead === 0 && r.json().freeRel === 2, r.body);
     mk = (await oapp.inject({ method: 'GET', url: '/api/online/market', headers: H2 })).json();
-    assert.equal(mk.my.dead, r.json().dead);
+    assert.equal(mk.my.dead, 0);
+    assert.equal(mk.my.freeRel, 2);
+    const cutRow = mk.fa.find((p) => p.id === cut.id);
+    assert.equal(cutRow && cutRow.rel, 'mine', 'свой расторгнутый помечен');
+    // вернуть своего нельзя, другому человеку — только через 24 часа
+    r = await oapp.inject({ method: 'POST', url: '/api/online/sign', headers: H2, payload: { id: cut.id, sal: mk.maxSal, yrs: 1 } });
+    assert.equal(r.json().error, 'released_by_you', r.body);
+    r = await oapp.inject({ method: 'POST', url: '/api/online/sign', headers: H, payload: { id: cut.id, sal: mk.maxSal, yrs: 1 } });
+    assert.equal(r.json().error, 'released_lock', r.body);
+    assert.equal(online.market(a.user.id, Date.now() + 25 * 3600e3).fa.find((p) => p.id === cut.id).rel, null, 'через 24 часа доступен');
+    // ещё два бесплатных, четвёртое — половина зарплаты под потолком
+    for (let k = 0; k < 3; k++) {
+      const t6c = (await oapp.inject({ method: 'GET', url: '/api/online/team/6', headers: H2 })).json();
+      const c2 = t6c.players.filter((p) => p.pos !== 'G' && p.yrs > 0).sort((x, y) => x.ovr - y.ovr)[0];
+      r = await oapp.inject({ method: 'POST', url: '/api/online/release', headers: H2, payload: { id: c2.id } });
+      if (r.statusCode === 409 && r.json().error === 'roster_min') break;
+      if (k < 2) assert.ok(r.json().free && r.json().dead === 0, r.body);
+      else assert.ok(!r.json().free && r.json().dead > 0 && r.json().freeRel === 0, r.body);
+    }
+    mk = (await oapp.inject({ method: 'GET', url: '/api/online/market', headers: H2 })).json();
+    assert.equal(mk.my.dead, r.statusCode === 200 ? r.json().dead : 0);
+    // финансы: касса, цены, арена
+    r = await oapp.inject({ method: 'GET', url: '/api/online/fin', headers: H });
+    let fv = r.json();
+    assert.ok(fv.cash === 8000 && fv.arena === 1 && fv.cap === 15000 && fv.cost > 0 && fv.next, r.body);
+    r = await oapp.inject({ method: 'POST', url: '/api/online/prices', headers: H, payload: { tix: { auto: false, price: 120 } } });
+    assert.ok(r.json().ok && r.json().tix.price === 120 && !r.json().tix.auto, r.body);
+    r = await oapp.inject({ method: 'POST', url: '/api/online/prices', headers: H, payload: { tix: { auto: false, price: 999 } } });
+    assert.equal(r.json().error, 'bad_price');
+    r = await oapp.inject({ method: 'POST', url: '/api/online/prices', headers: H, payload: { tix: { auto: true } } });
+    assert.ok(r.json().tix.auto);
+    r = await oapp.inject({ method: 'POST', url: '/api/online/arena', headers: H });
+    assert.ok(r.json().ok && r.json().arena === 2 && r.json().cap === 16500, r.body);
+    fv = (await oapp.inject({ method: "GET", url: "/api/online/fin", headers: H })).json();
+    assert.equal(fv.cash, 8000 - fv.spent);
+    r = await oapp.inject({ method: 'GET', url: '/api/online/fin' });
+    assert.equal(r.statusCode, 401, 'финансы — только своего клуба');
+    // дерби: у каждого есть соперник, пары взаимные, матчи отмечены
+    const vd = (await oapp.inject({ method: 'GET', url: '/api/online' })).json();
+    for (const t of vd.teams) assert.equal(vd.teams[t.rival].rival, t.id, 'пары дерби взаимные');
+    const dg = vd.slots.flatMap((sl) => sl.games).filter((g) => g.derby);
+    assert.equal(dg.length, 4 * 4, 'по 4 дерби у каждой из 4 пар');
     // первый игровой слот
     const first = v.slots[0];
     // отметка «на арене»: за минуту до начала
@@ -301,6 +371,25 @@ test('онлайн-сезон: создание, вход, расчёт, тра�
     const end = online.view(null, first.t + 366 * 864e5);
     assert.ok(end.champ != null, 'есть чемпион');
     assert.equal(end.teams.reduce((s, t) => s + t.gp, 0), 8 * 28);
+    // итоги: награды, очки, без id менеджеров в публичном виде
+    const R = end.results;
+    assert.ok(R && R.awards.sniper && R.awards.scorer && R.awards.goalie, JSON.stringify(R && R.awards));
+    // «Финансовый гений» и «Специалист по дерби» — только среди активных менеджеров (тест перематывает год: оба ушли к боту)
+    assert.equal(!!R.awards.genius, R.rows.some((x) => x.active));
+    assert.equal(R.rows.length, 2);
+    assert.ok(R.rows.every((x) => x.uid === undefined) && (!R.awards.genius || R.awards.genius.uid === undefined), 'id менеджеров не раскрываются');
+    for (const x of R.rows) assert.equal(x.points, x.pts.place + x.pts.po + x.pts.derby);
+    // в каждом клубе деньги за все матчи: ТВ за 28 матчей регулярки и больше
+    const f3 = (await oapp.inject({ method: 'GET', url: '/api/online/fin', headers: H })).json();
+    assert.ok(f3.inc.tv >= 28 * 400 && f3.inc.tix > 0 && f3.inc.jer > 0 && f3.closed, JSON.stringify(f3.inc));
+    const dl = f3.log.filter((l) => l.derby && l.home);
+    assert.ok(dl.every((l) => l.att === l.cap), 'на дерби полный зал');
+    // рейтинг: тестовый сезон в него не идёт, но в истории менеджера есть
+    r = await oapp.inject({ method: 'GET', url: '/api/online/rating', headers: H });
+    const rt = r.json();
+    assert.equal(rt.top.length, 0, 'тестовый сезон без рейтинга');
+    assert.equal(rt.history.length, 1);
+    assert.ok(rt.history[0].test);
     // перезапуск сервера поднимает сезон из базы
     const again = makeOnline(pool, html, { info() {}, error() {} });
     await again.init();

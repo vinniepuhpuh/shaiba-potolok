@@ -1,6 +1,8 @@
 import zlib from 'node:zlib';
 import { loadGame } from './engine.js';
 import { marketView, signFA, scoutOS, signOS, releasePlayer, tradeCheck, proposeTrade, answerTrade, marketTick } from './market.js';
+import { ensureFin, finView, setPrices, buyArena } from './fin.js';
+import { assignDerby, markDerby, finalize, ratingFrom, isDerby } from './awards.js';
 import { createSeason, runDue, publicView, joinSeason, teamView, setPlan, setLines, markPresence, preOf } from './league.js';
 
 /** Онлайн-режим: один активный сезон в памяти, все изменения по очереди, состояние сохраняется в базу. */
@@ -17,12 +19,18 @@ export function makeOnline(pool, htmlPath, log = console) {
     const r = (await pool.query("SELECT id, state FROM online_seasons WHERE status IN ('active','finished') ORDER BY id DESC LIMIT 1")).rows[0];
     if (r) {
       sid = r.id; S = r.state; G.S = S; S.teams.forEach((t) => G.ev('ensureNums')(t.id));
+      S.chem = {}; // сыгранности за матчи в онлайне больше нет (у старых сезонов она копилась)
       // сезоны, начатые раньше: трансляция 5 минут, первая минута — выход команд и отметка «на арене»
       const c = S.online.cfg; let ch = false;
       if (c.preSec == null) { c.preSec = 60; ch = true; }
       if (c.presenceK == null) { c.presenceK = 1.02; ch = true; }
       if (c.liveMin > 5) { c.liveMin = 5; ch = true; }
+      // сезоны, начатые до финансов и дерби
+      if (!S.online.fin) { ensureFin(S); ch = true; }
+      if (!S.online.derby) { assignDerby(S); ch = true; }
+      if (S.online.slots.some((s) => s.games.some((g) => g.derby == null))) { markDerby(S.online); ch = true; }
       if (ch) await save();
+      if (S.online.champ != null && !S.online.saved) await saveResults();
     }
     log.info?.(`online: движок ${G.version}, сезон ${sid ?? 'нет'}`);
   }
@@ -39,9 +47,34 @@ export function makeOnline(pool, htmlPath, log = console) {
           [sid, g.gid, g.slot, g.kind, g.t, g.h, g.a, g.res, JSON.stringify(g.box || null), JSON.stringify(g.ev || []), zlib.gzipSync(JSON.stringify(g.log))]
         );
       }
+      if (S.online.champ != null && !S.online.results) finalize(G, S, now);
       await save();
+      if (S.online.results && !S.online.saved) await saveResults();
       return games.length;
     });
+  }
+  // итоги сезона в базу: по строке на менеджера (для рейтинга и профиля)
+  async function saveResults() {
+    const R = S.online.results || finalize(G, S);
+    if (!R) return;
+    for (const r of R.rows) {
+      await pool.query(
+        `INSERT INTO online_results (season_id, uid, team, club, name, test, place, po_rounds, derby_w, points, profit, awards)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (season_id, uid) DO NOTHING`,
+        [sid, r.uid, r.team, r.club, r.name, R.test, r.place, r.poRounds, r.derbyW, r.points, r.profit, JSON.stringify(r.awards)]);
+    }
+    S.online.saved = true;
+    await save();
+  }
+  /** Рейтинг менеджеров: топ-50, моё место и мои сезоны. */
+  async function rating(uid) {
+    const rows = (await pool.query('SELECT uid, name, test, points, awards FROM online_results ORDER BY season_id DESC')).rows;
+    const all = ratingFrom(rows), i = uid == null ? -1 : all.findIndex((u) => u.uid === uid);
+    const hist = uid == null ? [] : (await pool.query(
+      `SELECT r.season_id, s.name AS season, r.club, r.place, r.po_rounds, r.derby_w, r.points, r.test, r.awards
+       FROM online_results r JOIN online_seasons s ON s.id = r.season_id WHERE r.uid = $1 ORDER BY r.season_id DESC LIMIT 20`, [uid])).rows;
+    const pub = (u, k) => ({ pos: k + 1, name: u.name, pts: u.pts, seasons: u.seasons, champs: u.champs, awards: u.awards, me: u.uid === uid });
+    return { top: all.slice(0, 50).map(pub), me: i >= 0 ? pub(all[i], i) : null, history: hist };
   }
   async function create(cfg, now = Date.now()) {
     return q(async () => {
@@ -111,7 +144,9 @@ export function makeOnline(pool, htmlPath, log = console) {
     if (!e) return { error: 'not_joined' };
     return tradeCheck(G, S, +e[0], Number(b.to), (b.give || []).map(Number), (b.get || []).map(Number), now);
   }
-  return { init, tick, create, view, join, touch, game, team, plan, lines, market, tradeEval,
+  function fin(uid, now = Date.now()) { if (!S) return { error: 'no_season' }; return finView(S, uid, now, isDerby); }
+  return { init, tick, create, view, join, touch, game, team, plan, lines, market, tradeEval, fin, rating,
+    prices: mut(setPrices), arena: mut((G_, S_, uid) => buyArena(G_, S_, uid)),
     sign: mut(signFA), scout: mut((G_, S_, uid, b, now) => scoutOS(G_, S_, uid, now)), osSign: mut(signOS), release: mut(releasePlayer),
     trade: mut(proposeTrade), answer: mut((G_, S_, uid, b, now) => answerTrade(G_, S_, uid, String(b.id), String(b.action), now)),
     get active() { return !!S; } };

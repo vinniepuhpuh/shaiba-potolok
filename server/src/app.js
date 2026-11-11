@@ -270,11 +270,23 @@ export function buildApp({ pool, cfg, logger = true, online = null }) {
     reply.header('Cache-Control', 'no-store');
     return online.market(softUid(req));
   });
+  app.get('/api/online/fin', { preHandler: auth }, async (req, reply) => {
+    if (!online || !online.active) return reply.code(404).send({ error: 'no_season' });
+    reply.header('Cache-Control', 'no-store');
+    const r = online.fin(req.uid);
+    if (r.error) return reply.code(409).send(r);
+    return r;
+  });
+  app.get('/api/online/rating', async (req, reply) => {
+    if (!online) return reply.code(404).send({ error: 'online_disabled' });
+    reply.header('Cache-Control', 'no-store');
+    return online.rating(softUid(req));
+  });
   app.post('/api/online/trade/eval', { preHandler: auth }, async (req, reply) => {
     if (!online || !online.active) return reply.code(404).send({ error: 'no_season' });
     return online.tradeEval(req.uid, req.body || {});
   });
-  for (const [path, fn] of [['sign', 'sign'], ['scout', 'scout'], ['os-sign', 'osSign'], ['release', 'release'], ['trade', 'trade'], ['trade/answer', 'answer']]) {
+  for (const [path, fn] of [['sign', 'sign'], ['scout', 'scout'], ['os-sign', 'osSign'], ['release', 'release'], ['trade', 'trade'], ['trade/answer', 'answer'], ['prices', 'prices'], ['arena', 'arena']]) {
     app.post('/api/online/' + path, { preHandler: auth }, async (req, reply) => {
       if (!online || !online.active) return reply.code(404).send({ error: 'no_season' });
       const r = await online[fn](req.uid, req.body || {});
