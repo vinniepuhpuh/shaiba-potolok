@@ -275,11 +275,23 @@ export function publicView(G, S, now, uid) {
     }
   }
   const strength = G.ev('allR')();
+  // стили последних сыгранных матчей (без идущих трансляций), новые первыми
+  const recSty = S.teams.map(() => []);
+  for (let i = o.slots.length - 1; i >= 0; i--) {
+    const s = o.slots[i];
+    if (live(s)) continue;
+    for (const g of s.games) {
+      if (!g.done || g.skip || !g.res) continue;
+      if (g.res.yh && recSty[g.h].length < 10) recSty[g.h].push(g.res.yh);
+      if (g.res.ya && recSty[g.a].length < 10) recSty[g.a].push(g.res.ya);
+    }
+  }
+  const favOf = (l) => { const c = {}; l.forEach((k) => { c[k] = (c[k] || 0) + 1; }); const k = Object.keys(c).sort((a, b) => c[b] - c[a])[0]; return k || null; };
   const teams = S.teams.map((t) => {
     const h = o.humans[t.id];
     const x = tbl[t.id];
     return { id: t.id, city: t.city, name: t.name, ab: t.ab, lg: t.lg, c1: t.c1, c2: t.c2, own: t.own, profile: t.profile,
-      str: Math.round(strength[t.id].t * 10) / 10, sty: t.sty || null,
+      str: Math.round(strength[t.id].t * 10) / 10, sty: (h && !h.bot ? favOf(recSty[t.id]) : t.sty) || null, styL: recSty[t.id].slice(0, 5),
       human: h && !h.bot ? { name: h.name || 'Менеджер' } : null,
       w: x.w, l: x.l, ot: x.ot, gf: x.gf, ga: x.ga, pts: x.w * 2 + x.ot, gp: x.w + x.l + x.ot };
   });

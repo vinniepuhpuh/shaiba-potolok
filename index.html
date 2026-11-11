@@ -870,12 +870,13 @@ function aiStyle(tid,opp){
 function userStyleAuto(){const f=fitsAll(S.user);return ST4.slice().sort((a,b)=>f[b]-f[a])[0];}
 function userStyle(){if(!S.styAuto)return S.sty||'BAL';const f=fitsAll(S.user);return ST4.slice().sort((a,b)=>f[b]-f[a])[0];}
 const styFor=(tid,opp)=>HOOK.sty&&HOOK.sty[tid]?HOOK.sty[tid]:tid===S.user?userStyle():aiStyle(tid,opp);
-/* goal multipliers [home, away]: the side whose style beats the other gains 5..10% by its fit; a well-fitted style adds up to ±2% */
+/* goal multipliers [home, away]: the side whose style beats the other gains 10..20% win chance by its fit; a well-fitted style adds up to ±2.5% */
+const STY_X0=.13,STY_X1=.13,STY_FITK=.1;
 function styMul(yh,ya,fh,fa){
-  const m=styM(yh,ya),x=1.35*(m>0?.05+.05*fh:m<0?-(.05+.05*fa):0);
-  return [(1+x)*(1+.05*(fh-.5)),(1-x)*(1+.05*(fa-.5))];
+  const m=styM(yh,ya),x=m>0?STY_X0+STY_X1*fh:m<0?-(STY_X0+STY_X1*fa):0;
+  return [(1+x)*(1+STY_FITK*(fh-.5)),(1-x)*(1+STY_FITK*(fa-.5))];
 }
-const styWinPct=(mine,opp,fm,fo)=>{const m=styM(mine,opp);return m>0?Math.round(5+5*fm):m<0?-Math.round(5+5*fo):0;};
+const styWinPct=(mine,opp,fm,fo)=>{const m=styM(mine,opp);return m>0?Math.round(10+10*fm):m<0?-Math.round(10+10*fo):0;};
 function styRec(tid,y,win){
   if(tid===S.user||!y)return;const t=ensureSty(T(tid));
   t.styL.unshift(y);t.styL.length=Math.min(t.styL.length,10);
@@ -1947,6 +1948,7 @@ function load(){try{const s=localStorage.getItem(KEY);if(s){const o=JSON.parse(s
 
 /* ---------- changelog ---------- */
 const CHANGES=[
+  {v:'2026-11-11a',d:'11 ноября',t:'Тактика решает больше',items:['Стиль игры стал влиять на результат вдвое сильнее: стиль, который бьёт стиль соперника, даёт от 10 до 20% к шансу победы, чем лучше он подходит составу, тем больше.','В протоколе матча видно, какими стилями и с каким риском играли обе команды и у кого было преимущество.','Онлайн-лига: перед матчем и в плане на матч показаны стили соперника в последних 5 матчах, как в карьере.']},
   {v:'2026-11-09e',d:'9 ноября',t:'Трансляции быстрее, поддержка трибун',items:['Матч онлайн-лиги теперь идёт 5 минут вместо 10: события сменяются вдвое быстрее.','Первая минута после начала — выход команд. Если открыть свой матч за 10 минут до старта или в эту минуту, команда почувствует поддержку и шансы на победу немного вырастут.','На главной вкладке сезона перед матчем появляется кнопка «На арену».']},
   {v:'2026-11-09d',d:'9 ноября',t:'Зарплаты и потолок в обменах',items:['В онлайн-лиге у каждого игрока видна зарплата и оценка контракта: выгодный, по рынку или дорогой.','В обменах показан потолок обоих клубов: сколько свободно сейчас и сколько останется после сделки, а также число игроков.']},
   {v:'2026-11-09c',d:'9 ноября',t:'Рынок в онлайн-лиге',items:['В онлайн-лиге появилась вкладка «Рынок».','Свободные агенты общие на всю лигу: кто первым договорился, того и игрок.','«За рубежом» — личный список: раз в день скаут привозит трёх игроков, которых видите только вы.','Обмены: компьютерные клубы отвечают сразу и соглашаются, если обмен выгоден им на 15–20%. Живым менеджерам предложение уходит на 48 часов — принять или отклонить можно во вкладке «Рынок».','Контракт своего игрока можно расторгнуть в «Состав» → «Игроки»: половина зарплаты остаётся под потолком до конца сезона.']},
@@ -3337,7 +3339,7 @@ function mkBox(L){
   for(const id in L.ps){const p=M.get(+id),s=L.ps[id];if(p)pl[s.k].push({n:nm(p),pos:p.pos,...s});}
   pl.forEach(a=>a.sort((x,y)=>(y.g+y.a)-(x.g+x.a)||y.toi-x.toi));
   const gk=[0,1].map(k=>{const g=M.get(X[k].g);return {n:g?nm(g):'—',sa:L.gk[k].sa,ga:L.gk[k].ga};});
-  return {d:L.kind==='reg'?'Д'+(S.day+1):'ПО',h:L.h,a:L.a,sc:L.sc.slice(),pg:L.pg,psh:L.psh,ot:L.ot,so:L.so,ppg:L.ppg,ppo:L.ppo,pim:L.pim,zt:L.zt,tac:L.tac,ev:L.ev.filter(e=>e.ty!=='per'),pl,gk};
+  return {d:L.kind==='reg'?'Д'+(S.day+1):'ПО',h:L.h,a:L.a,sc:L.sc.slice(),pg:L.pg,psh:L.psh,ot:L.ot,so:L.so,ppg:L.ppg,ppo:L.ppo,pim:L.pim,zt:L.zt,tac:L.tac,sty:L.sty?L.sty.slice():null,ev:L.ev.filter(e=>e.ty!=='per'),pl,gk};
 }
 function boxView(b,live){
   const h=T(b.h),a=T(b.a),np=b.ot?4:3,cols=[...Array(np)].map((_,i)=>i<3?i+1:'ОТ');
@@ -3356,7 +3358,8 @@ function boxView(b,live){
   ${cmp('Большинство',`${b.ppg[0]}/${b.ppo[0]}`,`${b.ppg[1]}/${b.ppo[1]}`,b.ppg[0]+.01,b.ppg[1]+.01)}
   ${cmp('Штрафные минуты',b.pim[0],b.pim[1],b.pim[0],b.pim[1])}
   ${cmp('Время в зоне атаки',Math.round(b.zt[0]/zt*100)+'%',Math.round(b.zt[1]/zt*100)+'%',b.zt[0],b.zt[1])}
-  ${cmp('Тактика',b.tac[0],b.tac[1],b.tac[0],b.tac[1])}</section>
+  ${b.sty&&STY[b.sty[0]]&&STY[b.sty[1]]?(()=>{const m=styM(b.sty[0],b.sty[1]);return `<div class="cmp"><b class="${m>0?'ok':m<0?'bad':''}">${STY[b.sty[0]].n}</b><span>Стиль</span><b class="${m<0?'ok':m>0?'bad':''}">${STY[b.sty[1]].n}</b></div><p class="small muted center">${m?`«${STY[b.sty[m>0?0:1]].n}» бьёт «${STY[b.sty[m>0?1:0]].n}»: преимущество у ${(m>0?h:a).city}.`:'Стили нейтральны друг к другу.'}</p>`;})():''}
+  ${cmp('Риск',RISKN[nearRisk(b.tac[0])],RISKN[nearRisk(b.tac[1])],b.tac[0],b.tac[1])}</section>
   ${live?'':`<section class="card"><h2>Ход матча</h2>${feedHTML(b.ev,b.h,b.a)}</section>`}
   <section class="card"><h2>Игроки</h2>${plT(0,h)}${plT(1,a)}<p class="small muted">Бр — броски, ± — плюс-минус в равных составах, Шт — штрафные минуты, Вр — время на льду.</p></section>`;
 }
@@ -3504,7 +3507,7 @@ function oViewHome(){
     html+=`<section class="card" data-tut="o-club"><h2>Мой клуб<span>${pl}-е место</span></h2><div class="orow">${badge(t,52)}<div><b>${t.city} ${t.name}</b><small>${PROFN[t.profile]||''} · сила ${t.str.toFixed(1)} · ${oRec(t)}</small></div></div></section>`;
     if(nx){const o=oT(nx.g.h===my?nx.g.a:nx.g.h),st=oState(nx.s,nx.g),pk=nx.s.i,plan=oPlanOf(pk);
       html+=`<section class="card${st==='live'?' hl':''}"><h2>${st==='live'?'Идёт матч':'Следующий матч'}<span>${st==='live'?'':oWhen(nx.s.t)}</span></h2>${oGameRow(nx.s,nx.g,my)}
-      <p class="small">${nx.g.h===my?'Дома':'В гостях'} против «${o.name}»${o.human?` (менеджер ${oEsc(o.human.name)})`:''}. Любимый стиль соперника: <b>${o.sty&&STY[o.sty]?STY[o.sty].n:'не известен'}</b>.</p>
+      <p class="small">${nx.g.h===my?'Дома':'В гостях'} против «${o.name}»${o.human?` (менеджер ${oEsc(o.human.name)})`:''}. </p>${oStyHTML(o)}
       ${st==='pre'||(st==='live'&&!nx.g.res&&oNow()<nx.s.t+(OL.v.preSec||0)*1000)?`<p class="small">Приходите на арену к началу: если открыть матч за 10 минут до старта или в первую минуту, команда почувствует поддержку и шансы на победу немного вырастут.</p><button class="btn pri" data-a="oWatch" data-id="${nx.g.id}">На арену</button>`:''}
       ${st==='soon'||st==='pre'?`<p class="small muted">План на матч: ${oPlanTxt(plan)}.</p><button class="btn" data-a="oPlanFor" data-id="${pk}">Тактика на этот матч</button>`:''}</section>`;}
   }
@@ -3538,6 +3541,10 @@ function oViewTable(){
   return html;
 }
 /* ---------- план на матч ---------- */
+function oStyHTML(o){
+  const l=(o.styL||[]).filter(x=>STY[x]),f=o.sty&&STY[o.sty]?o.sty:null,n=f?l.filter(x=>x===f).length:0;
+  return `<p class="small">${o.human?'Чаще всего играет':'Любимый стиль'}: <b>${f?STY[f].n:'пока не известен'}</b>${l.length?`${f?` (${n} из ${l.length} последних)`:''} · последние матчи: ${l.map(x=>`<b title="${STY[x].n}">${STY[x].s}</b>`).join(' ')}`:''}.</p>`;
+}
 function oPlanOf(k){const tv=OL.team[oMy()];const P_=tv&&tv.plans||{};return k==='def'?(P_.def||{}):(P_[k]||null);}
 function oPlanTxt(p){if(!p)return 'как по умолчанию';const a=[];a.push(p.sty?STY[p.sty].n:'стиль авто');a.push(p.risk?RISKN[p.risk].toLowerCase():'риск авто');if(p.pull===false)a.push('без замены вратаря');return a.join(', ');}
 function oPlanCard(){
@@ -3550,7 +3557,7 @@ function oPlanCard(){
   const chips=`<div class="chips"><button class="chip" data-a="oPlanK" data-id="def" aria-pressed="${k==='def'}">По умолчанию</button>${ms.map(x=>{const o=oT(x.g.h===my?x.g.a:x.g.h);return `<button class="chip" data-a="oPlanK" data-id="${x.s.i}" aria-pressed="${String(k)===String(x.s.i)}">${oDayLbl(x.s.t).replace(/^(\S+).*/,'$1')} ${oHM(x.s.t)} · ${o.ab}${oPlanOf(x.s.i)?' ✎':''}</button>`;}).join('')}</div>`;
   return `<section class="card" data-tut="o-plan"><h2>Тактика<span>${k==='def'?'на все матчи':'на один матч'}</span></h2>
   <p class="small muted">Матчи считаются без вас, поэтому план задаётся заранее. «По умолчанию» действует на все матчи, у которых нет своего плана.</p>${chips}
-  ${nx?`<p class="small">${oWhen(nx.s.t)}, ${nx.g.h===my?'дома':'в гостях'} против «${opp.name}». Их любимый стиль: <b>${ex&&STY[ex]?STY[ex].n:'не известен'}</b>.</p>${own?'':`<p class="small muted">Своего плана нет — действует план по умолчанию. Нажмите на стиль или риск, чтобы задать отдельный.</p>`}`:''}
+  ${nx?`<p class="small">${oWhen(nx.s.t)}, ${nx.g.h===my?'дома':'в гостях'} против «${opp.name}». </p>${oStyHTML(opp)}${own?'':`<p class="small muted">Своего плана нет — действует план по умолчанию. Нажмите на стиль или риск, чтобы задать отдельный.</p>`}`:''}
   <div class="stys">${STK.map(btn).join('')}</div>
   <div class="seg"><button data-a="oSty" data-id="" aria-pressed="${!eff.sty}">Стиль: авто</button></div>
   <small class="muted">Риск</small>
