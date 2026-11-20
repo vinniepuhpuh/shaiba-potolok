@@ -3,6 +3,7 @@
 // Очки рейтинга менеджера за сезон: место в регулярке + пройденные раунды плей-офф + победы в дерби.
 // Тестовые сезоны в рейтинг не идут, но итоги и награды в них есть.
 import { profitOf, incomeOf, ensureFin } from './fin.js';
+import { sponsorResults } from './staff.js';
 
 export const PTS = {
   place: 20, // за 1-е место в регулярке; дальше поровну вниз до 0 у последнего
@@ -61,6 +62,14 @@ export function finalize(G, S, now = Date.now()) {
   for (const r of (o.po && o.po.rounds) || []) for (const s of r) { const w = s.wa >= W ? s.a : s.wb >= W ? s.b : null; if (w != null) rounds[w]++; }
   const dt = derbyTable(S);
   const placePts = (p) => (N > 1 ? Math.round(PTS.place * (N - p) / (N - 1)) : PTS.place);
+  // требование спонсора: в большой лиге — место в своей конференции, иначе — в общей таблице
+  let placeOf = (tid) => place[tid];
+  if (o.cfg.big) {
+    const cp = {};
+    for (const c of [0, 1]) order.filter((id) => S.teams[id].conf === c).forEach((id, i) => { cp[id] = i + 1; });
+    placeOf = (tid) => cp[tid];
+  }
+  const spon = sponsorResults(S, placeOf); // премии спонсоров — до подсчёта прибыли
 
   // награды игроков: по всему турниру
   const ps = S.players.filter((p) => p.team >= 0 && p.team < N);
@@ -88,14 +97,15 @@ export function finalize(G, S, now = Date.now()) {
     derby: dspec && { uid: dspec.uid, name: dspec.name, team: dspec.tid, club: S.teams[dspec.tid].name, val: dt[dspec.tid].w, gf: dt[dspec.tid].gf, ga: dt[dspec.tid].ga },
   };
   const rows = mgr.map((m) => {
-    const d = dt[m.tid], pts = { place: placePts(place[m.tid]), po: rounds[m.tid] * PTS.round, derby: d.w * PTS.derbyWin };
+    const d = dt[m.tid], sp = spon[m.tid] || null;
+    const pts = { place: placePts(place[m.tid]), po: rounds[m.tid] * PTS.round, derby: d.w * PTS.derbyWin, spon: sp ? sp.pts : 0 };
     const my = [];
     if (o.champ === m.tid) my.push('champ');
     if (awards.genius && awards.genius.uid === m.uid) my.push('genius');
     if (awards.derby && awards.derby.uid === m.uid) my.push('derby');
     return { uid: m.uid, name: m.name, team: m.tid, club: S.teams[m.tid].name, active: !m.bot, place: place[m.tid], poRounds: rounds[m.tid],
       derbyW: d.w, derbyGp: d.gp, derbyGf: d.gf, derbyGa: d.ga, profit: profitOf(fin(m.tid)), income: incomeOf(fin(m.tid)),
-      pts, points: pts.place + pts.po + pts.derby, awards: my };
+      sponsor: sp, pts, points: pts.place + pts.po + pts.derby + pts.spon, awards: my };
   });
   o.results = { at: now, test: !!o.cfg.test, awards, rows, champ: o.champ };
   return o.results;

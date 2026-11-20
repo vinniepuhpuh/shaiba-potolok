@@ -4,6 +4,7 @@
  */
 import { ensureFin, finGame } from './fin.js';
 import { assignDerby, markDerby, derbyTable } from './awards.js';
+import { initStaff, initSponsors, coachHooks, scaleOf, growMainK, growAcadK, STAFF } from './staff.js';
 
 const H = 3600e3, MIN = 60e3;
 const MSK = 3 * H; // Москва UTC+3 круглый год
@@ -62,11 +63,114 @@ function roundRobin(n) {
   return rounds;
 }
 
+// ---------- расписание большого сезона: 82 матча — дивизион 26, конференция 24, межконференция 32 ----------
+// 2 конференции × 2 дивизиона × 8 клубов. Каждый раунд — 16 игр, все клубы играют.
+function rrMatchings(ids) { // круговые матчинги: каждая пара ровно раз за n-1 раундов
+  const a = ids.slice(), n = a.length, out = [];
+  for (let r = 0; r < n - 1; r++) {
+    const games = [];
+    for (let i = 0; i < n / 2; i++) games.push([a[i], a[n - 1 - i]]);
+    out.push(games);
+    a.splice(1, 0, a.pop());
+  }
+  return out;
+}
+function nhlSchedule(S) {
+  const divTeams = {}, confTeams = {};
+  for (const t of S.teams) {
+    if (t.conf == null || t.div == null) return null;
+    (divTeams[t.div] = divTeams[t.div] || []).push(t.id);
+    (confTeams[t.conf] = confTeams[t.conf] || []).push(t.id);
+  }
+  const divs = Object.keys(divTeams).map(Number), confIds = Object.keys(confTeams).map(Number);
+  if (divs.length !== 4 || confIds.length !== 2) return null;
+  if (divs.some((d) => divTeams[d].length !== 8) || confIds.some((c) => confTeams[c].length !== 16)) return null;
+
+  // 1) дивизион: 26 раундов. Пары из M0∪M1 — по 3 матча, остальные — по 4.
+  const divRounds = [];
+  for (const d of divs) {
+    const ids = divTeams[d].slice();
+    const M = rrMatchings(ids);
+    // баланс «у кого 2 дома» в 3-матчевых парах: чередуем по циклам объединения M0+M1
+    const adj = {};
+    [...M[0], ...M[1]].forEach(([a, b]) => { (adj[a] = adj[a] || []).push(b); (adj[b] = adj[b] || []).push(a); });
+    const home2 = {}, seen = new Set(), key = (a, b) => (a < b ? a + '|' + b : b + '|' + a);
+    for (const s0 of Object.keys(adj).map(Number)) {
+      if (seen.has(s0)) continue;
+      // объединение двух матчингов — циклы чётной длины; обходим цикл, у каждой вершины ровно одно «2 дома»
+      let v = s0, prev = null;
+      do {
+        seen.add(v);
+        const w = adj[v].find((x) => x !== prev);
+        if (w == null) break;
+        home2[key(v, w)] = v;
+        prev = v; v = w;
+      } while (v !== s0);
+    }
+    const rounds = [];
+    for (let mi = 0; mi < 7; mi++) {
+      const copies = mi < 2 ? 3 : 4;
+      for (let c = 0; c < copies; c++) {
+        rounds.push(M[mi].map(([a, b]) => {
+          let h;
+          if (mi < 2) h = c === 1 ? (home2[key(a, b)] === a ? b : a) : home2[key(a, b)];
+          else h = c % 2 === 0 ? a : b;
+          return [h, h === a ? b : a];
+        }));
+      }
+    }
+    rounds.forEach((rd, i) => { (divRounds[i] = divRounds[i] || []).push(...rd); });
+  }
+
+  // 2) другой дивизион конференции: 24 раунда, по 3 матча с каждым (2 дома / 1 в гостях по чётности позиций)
+  const cxRounds = [];
+  for (const c of confIds) {
+    const ds = divs.filter((d) => confTeams[c].some((id) => divTeams[d].includes(id)));
+    if (ds.length !== 2) return null;
+    const A = divTeams[ds[0]], B = divTeams[ds[1]];
+    const rounds = [];
+    for (let occ = 0; occ < 3; occ++) {
+      for (let k = 0; k < 8; k++) {
+        rounds.push(A.map((a, i) => {
+          const j = (i + k) % 8, b = B[j], a2 = (i + j) % 2 === 0;
+          const h = occ === 1 ? (a2 ? b : a) : (a2 ? a : b);
+          return [h, h === a ? b : a];
+        }));
+      }
+    }
+    rounds.forEach((rd, i) => { (cxRounds[i] = cxRounds[i] || []).push(...rd); });
+  }
+
+  // 3) другая конференция: 32 раунда, по 2 матча (дома и в гостях)
+  const [C0, C1] = confIds.map((c) => confTeams[c]);
+  const interRounds = [];
+  for (let occ = 0; occ < 2; occ++) {
+    for (let k = 0; k < 16; k++) {
+      interRounds.push(C0.map((a, i) => {
+        const b = C1[(i + k) % 16];
+        const h = (occ === 0) === (k % 2 === 0) ? a : b;
+        return [h, h === a ? b : a];
+      }));
+    }
+  }
+
+  // 4) перемешиваем равномерно: очередь с наибольшей оставшейся долей
+  const qs = [divRounds, cxRounds, interRounds].filter((q) => q.length).map((l) => ({ l, i: 0 }));
+  const total = qs.reduce((s, q) => s + q.l.length, 0), out = [];
+  while (out.length < total) {
+    let bi = 0, bs = -1;
+    qs.forEach((q, i) => { const left = (q.l.length - q.i) / (total - out.length); if (left > bs) { bs = left; bi = i; } });
+    out.push(qs[bi].l[qs[bi].i++]);
+  }
+  return out;
+}
+
 export function createSeason(G, cfgIn, now = Date.now()) {
   const cfg = { ...DEFAULT_CFG, ...cfgIn };
   if (!cfg.start) cfg.start = tomorrowMsk(now);
   G.ev('newWorld()');
   const S = G.S;
+  if (cfg.big && !cfgIn.clubs) cfg.clubs = S.teams.map((t) => t.id); // большой сезон: все 32 клуба
   const keep = cfg.clubs.map((orig, i) => ({ ...S.teams[orig], id: i, lg: orig }));
   S.teams = keep;
   S.players = [];
@@ -106,9 +210,19 @@ export function createSeason(G, cfgIn, now = Date.now()) {
   S.phase = 'regular'; S.day = 0; S.sched = []; S.news = []; S.offers = []; S.box = []; S.chem = {}; S.lines = null;
 
   // слоты регулярки
-  const rr = roundRobin(keep.length), slots = [];
-  for (let rep = 0; rep < cfg.vsEach; rep++) {
-    for (const r of rr) slots.push({ kind: 'reg', games: r.map(([h, a]) => (rep % 2 ? [a, h] : [h, a])) });
+  const nhl = cfg.big ? nhlSchedule(S) : null, big = !!nhl, slots = [];
+  if (big) {
+    cfg.big = true;
+    cfg.regTimes = cfgIn.regTimes ? cfg.regTimes : ['19:00']; // большой сезон: раунд в день
+    if (cfgIn.deadlineGame == null) cfg.deadlineGame = 60;
+    if (cfgIn.growK == null) cfg.growK = 1; // темп роста карьеры: 82 матча
+  }
+  if (nhl) for (const rd of nhl) slots.push({ kind: 'reg', games: rd.map(([h, a]) => [h, a]) });
+  else {
+    const rr = roundRobin(keep.length);
+    for (let rep = 0; rep < cfg.vsEach; rep++) {
+      for (const r of rr) slots.push({ kind: 'reg', games: r.map(([h, a]) => (rep % 2 ? [a, h] : [h, a])) });
+    }
   }
   slots.forEach((s, i) => {
     s.i = i;
@@ -124,14 +238,15 @@ export function createSeason(G, cfgIn, now = Date.now()) {
   ensureFin(S);
   assignDerby(S);
   markDerby(S.online);
+  initStaff(G, S); // стартовые тренера: главный — под состав клуба
+  initSponsors(G, S); // три предложения спонсоров каждому клубу
   return S;
 }
 
 // ---------- плей-офф ----------
-function buildPlayoffRound(G, S, teamsOrder, round, startT) {
-  const o = S.online, cfg = o.cfg, n = teamsOrder.length;
-  const series = [];
-  for (let i = 0; i < n / 2; i++) series.push({ a: teamsOrder[i], b: teamsOrder[n - 1 - i], wa: 0, wb: 0 });
+function buildPlayoffRound(G, S, pairs, round, startT) {
+  const o = S.online, cfg = o.cfg;
+  const series = pairs.map(([a, b]) => ({ a, b, wa: 0, wb: 0 })); // a — посев выше, у него преимущество дома
   const maxG = cfg.seriesWins * 2 - 1;
   const homeA = [0, 1, 4, 6]; // 1,2,5,7 — дома у сеяной выше
   for (let g = 0; g < maxG; g++) {
@@ -153,10 +268,15 @@ function maybeAdvancePlayoffs(G, S, lastT) {
     const d = new Date(t + MSK).toISOString().slice(0, 10);
     return dayStartMsk(addDays(d, 1));
   };
+  const pairUp = (order) => { const ps = []; for (let i = 0; i < order.length / 2; i++) ps.push([order[i], order[order.length - 1 - i]]); return ps; };
   if (!o.po) {
     const order = S.teams.slice().sort(G.ev('cmpStand')).map((t) => t.id);
     o.seeds = order;
-    buildPlayoffRound(G, S, order, 0, nextDay(lastT));
+    if (o.cfg.big) {
+      // 8 команд от конференции: 1в8, 2в7, 3в6, 4в5 внутри своей
+      o.seedsC = [0, 1].map((c) => order.filter((id) => S.teams[id].conf === c).slice(0, 8));
+      buildPlayoffRound(G, S, o.seedsC.flatMap(pairUp), 0, nextDay(lastT));
+    } else buildPlayoffRound(G, S, pairUp(order), 0, nextDay(lastT));
     return;
   }
   const cur = o.po.rounds[o.po.rounds.length - 1];
@@ -164,24 +284,42 @@ function maybeAdvancePlayoffs(G, S, lastT) {
   if (!cur.every((s) => s.wa >= W || s.wb >= W)) return;
   const winners = cur.map((s) => (s.wa >= W ? s.a : s.b));
   if (winners.length === 1) { o.champ = winners[0]; o.endedAt = lastT; return; }
-  // пересев: оставшиеся по исходному посеву
-  const order = o.seeds.filter((id) => winners.includes(id));
-  buildPlayoffRound(G, S, order, o.po.rounds.length, nextDay(lastT));
+  let pairs;
+  if (o.cfg.big) {
+    // пересев внутри конференций; когда остались чемпионы конференций — финал
+    const groups = o.seedsC.map((sd) => sd.filter((id) => winners.includes(id)));
+    if (groups[0].length === 1 && groups[1].length === 1) {
+      const [x, y] = [groups[0][0], groups[1][0]];
+      pairs = o.seeds.indexOf(x) <= o.seeds.indexOf(y) ? [[x, y]] : [[y, x]]; // лучший по регулярке — дома
+    } else pairs = groups.flatMap(pairUp);
+  } else {
+    // пересев: оставшиеся по исходному посеву
+    pairs = pairUp(o.seeds.filter((id) => winners.includes(id)));
+  }
+  buildPlayoffRound(G, S, pairs, o.po.rounds.length, nextDay(lastT));
 }
 
 // ---------- рост игроков после матча ----------
 function growAfterGame(G, S, tids) {
   const k = S.online.cfg.growK, n = S.online.slots.filter((s) => s.kind === 'reg').length || 28;
   const growRate = G.ev('growRate');
+  // академия: ускоренный рост (×1.2, +15% за уровень академии, бонус физика при шкале в минусе)
+  const upg = S.online.upg || {};
+  for (const p of S.players) {
+    if (p.team !== -5 || p.pot <= p.ovr) continue;
+    const w = 1.2 * (1 + 0.15 * ((upg[p.acadTid] || {}).acad || 0)) * growAcadK(S, p.acadTid);
+    p.gx = (p.gx || 0) + (p.pot0 - p.ovr0) * growRate(p.age) * k * w / n;
+    while (p.gx >= 1 && p.ovr < p.pot) { p.ovr++; p.gx -= 1; }
+  }
   for (const tid of tids) {
-    const L = G.ev('getLines')(tid), w = {};
+    const L = G.ev('getLines')(tid), w = {}, mk = growMainK(S, tid); // физик: рост основы ×0.6…×1.4
     L.f.forEach((l, i) => l.forEach((id) => { if (id != null) w[id] = [1.3, 1.1, 0.9, 0.7][i] / 1.1; }));
     L.d.forEach((l, i) => l.forEach((id) => { if (id != null) w[id] = [1.2, 1, 0.8][i] / 1.1; }));
     if (L.g[0] != null) w[L.g[0]] = 1;
     for (const p of S.players) {
       if (p.team !== tid || !(p.id in w)) continue;
       let r = 0;
-      if (p.age <= 28 && p.pot > p.ovr) r = (p.pot0 - p.ovr0) * growRate(p.age) * k * w[p.id] / n;
+      if (p.age <= 28 && p.pot > p.ovr) r = (p.pot0 - p.ovr0) * growRate(p.age) * k * w[p.id] * mk / n;
       else if (p.age >= 33) r = -(p.age - 32) * 0.5 / n;
       p.gx = (p.gx || 0) + r;
       while (p.gx >= 1 && p.ovr < p.pot) { p.ovr++; p.gx -= 1; }
@@ -196,6 +334,7 @@ function setHooks(G, S, slotIdx) {
   const o = S.online, HK = G.HOOK;
   S.chem = {}; // в онлайне нет сыгранности за матчи вместе: только бонус за связку ролей
   HK.lines = {}; HK.tac = {}; HK.sty = {}; HK.pull = {}; HK.human = {}; HK.boost = {};
+  HK.plus = coachHooks(G, S); // тренеры: FIT стилей в движок + временная сила от физика
   HK.injK = Math.min(1, (o.slots.filter((s) => s.kind === 'reg').length || 82) / 82);
   for (const [tid, h] of Object.entries(o.humans)) {
     if (!h || h.bot) continue;
@@ -231,6 +370,30 @@ export function runDue(G, S, now = Date.now()) {
     if (!slot || slot.t + preOf(o) > now) break;
     G.S = S;
     setHooks(G, S, slot.i);
+    // Адаптация в серии плей-офф: повтор одного стиля подряд теряет силу (100/85/70/55%)
+    if (slot.kind === 'po') {
+      const DECAY = [1, 0.85, 0.7, 0.55], K = {};
+      for (const g of slot.games) {
+        if (g.done) continue;
+        for (const tid of [g.h, g.a]) {
+          let rep = 0;
+          for (let gg = slot.g - 1; gg >= 0; gg--) {
+            const prev = o.slots.find((s) => s.kind === 'po' && s.round === slot.round && s.g === gg);
+            const pg = prev && prev.games.find((x) => x.series === g.series);
+            if (!pg || !pg.res) break;
+            const y = pg.h === tid ? pg.res.yh : pg.res.ya;
+            const before = gg > 0 ? (() => {
+              const p2 = o.slots.find((s) => s.kind === 'po' && s.round === slot.round && s.g === gg - 1);
+              const pg2 = p2 && p2.games.find((x) => x.series === g.series);
+              return pg2 && pg2.res ? (pg2.h === tid ? pg2.res.yh : pg2.res.ya) : null;
+            })() : null;
+            if (y && (gg === slot.g - 1 || y === before)) rep++; else break;
+          }
+          K[tid] = DECAY[Math.min(rep, DECAY.length - 1)];
+        }
+      }
+      G.ev(`globalThis.__styK=${JSON.stringify(K)};`);
+    } else G.ev('globalThis.__styK={};');
     const played = [];
     for (const g of slot.games) {
       if (g.done) continue;
@@ -300,8 +463,10 @@ export function publicView(G, S, now, uid) {
     const h = o.humans[t.id];
     const x = tbl[t.id];
     return { id: t.id, city: t.city, name: t.name, ab: t.ab, lg: t.lg, c1: t.c1, c2: t.c2, own: t.own, profile: t.profile,
+      conf: t.conf ?? null, div: t.div ?? null,
       rival: o.derby ? o.derby[t.id] ?? null : null, dw: dt[t.id] ? dt[t.id].w : 0, dgp: dt[t.id] ? dt[t.id].gp : 0,
       str: Math.round(strength[t.id].t * 10) / 10, sty: (h && !h.bot ? favOf(recSty[t.id]) : t.sty) || null, styL: recSty[t.id].slice(0, 5),
+      hot: scaleOf(S, t.id) >= STAFF.hotAt, // 🔥 «в ударе»: шкала физика высокая, точное значение скрыто
       human: h && !h.bot ? { name: h.name || 'Менеджер' } : null,
       w: x.w, l: x.l, ot: x.ot, gf: x.gf, ga: x.ga, pts: x.w * 2 + x.ot, gp: x.w + x.l + x.ot };
   });
@@ -327,7 +492,7 @@ export function publicView(G, S, now, uid) {
   const noUid = (x) => { if (!x) return x; const { uid: _u, ...rest } = x; return rest; };
   const results = R && { test: R.test, champ: R.champ, rows: R.rows.map(noUid),
     awards: { ...R.awards, genius: noUid(R.awards.genius), derby: noUid(R.awards.derby) } };
-  return { name: cfg.name, test: !!cfg.test, now, deadlineT: o.deadlineT, canJoin: now < o.deadlineT, liveMin: cfg.liveMin, preSec: pre / 1000, teams, slots, po, champ, results, my };
+  return { name: cfg.name, test: !!cfg.test, big: !!cfg.big, now, deadlineT: o.deadlineT, canJoin: now < o.deadlineT, liveMin: cfg.liveMin, preSec: pre / 1000, teams, slots, po, champ, results, my };
 }
 
 export function joinSeason(S, team, uid, name, now = Date.now()) {

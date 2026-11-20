@@ -1,6 +1,8 @@
 import zlib from 'node:zlib';
 import { loadGame } from './engine.js';
-import { marketView, signFA, scoutOS, signOS, releasePlayer, tradeCheck, proposeTrade, answerTrade, marketTick } from './market.js';
+import { marketView, releasePlayer, tradeCheck, proposeTrade, answerTrade, marketTick } from './market.js';
+import { academyView, acadSearch, acadTake, acadPromote, buyUpg, bidFA, bidPoach, poachMatch, inheritAcademy } from './academy.js';
+import { staffView, setMode, hireCoach, chooseSponsor } from './staff.js';
 import { ensureFin, finView, setPrices, buyArena } from './fin.js';
 import { assignDerby, markDerby, finalize, ratingFrom, isDerby } from './awards.js';
 import { createSeason, runDue, publicView, joinSeason, teamView, setPlan, setLines, markPresence, preOf, dueNotifications } from './league.js';
@@ -37,7 +39,7 @@ export function makeOnline(pool, htmlPath, log = console) {
   async function tick(now = Date.now()) {
     return q(async () => {
       if (!S) return 0;
-      marketTick(S, now);
+      marketTick(S, now, G);
       const games = runDue(G, S, now);
       if (!games.length) return 0;
       for (const g of games) {
@@ -79,10 +81,12 @@ export function makeOnline(pool, htmlPath, log = console) {
   async function create(cfg, now = Date.now()) {
     return q(async () => {
       await pool.query("UPDATE online_seasons SET status='archived' WHERE status IN ('active','finished')");
+      const prev = S; // для наследования академии
       S = createSeason(G, cfg || {}, now);
+      const inh = inheritAcademy(G, S, prev, now);
       const r = await pool.query('INSERT INTO online_seasons (name, state) VALUES ($1,$2) RETURNING id', [S.online.cfg.name, JSON.stringify(S)]);
       sid = r.rows[0].id;
-      return { id: sid, slots: S.online.slots.length, first: S.online.slots[0].t };
+      return { id: sid, slots: S.online.slots.length, first: S.online.slots[0].t, inherited: inh };
     });
   }
   function view(uid, now = Date.now()) {
@@ -154,9 +158,13 @@ export function makeOnline(pool, htmlPath, log = console) {
     return tradeCheck(G, S, +e[0], Number(b.to), (b.give || []).map(Number), (b.get || []).map(Number), now);
   }
   function fin(uid, now = Date.now()) { if (!S) return { error: 'no_season' }; return finView(S, uid, now, isDerby); }
-  return { init, tick, create, view, join, touch, game, team, plan, lines, market, tradeEval, fin, rating, notify,
+  function academy(uid, now = Date.now()) { if (!S) return null; return academyView(G, S, uid, now); }
+  function staff(uid, now = Date.now()) { if (!S) return null; return staffView(G, S, uid, now); }
+  return { init, tick, create, view, join, touch, game, team, plan, lines, market, tradeEval, fin, rating, notify, academy, staff,
     prices: mut(setPrices), arena: mut((G_, S_, uid) => buyArena(G_, S_, uid)),
-    sign: mut(signFA), scout: mut((G_, S_, uid, b, now) => scoutOS(G_, S_, uid, now)), osSign: mut(signOS), release: mut(releasePlayer),
+    bid: mut(bidFA), poachBid: mut(bidPoach), search: mut((G_, S_, uid, b, now) => acadSearch(G_, S_, uid, now)),
+    take: mut(acadTake), promote: mut(acadPromote), upg: mut(buyUpg), match: mut(poachMatch), release: mut(releasePlayer),
+    coachMode: mut(setMode), coachHire: mut(hireCoach), sponsor: mut(chooseSponsor),
     trade: mut(proposeTrade), answer: mut((G_, S_, uid, b, now) => answerTrade(G_, S_, uid, String(b.id), String(b.action), now)),
     get active() { return !!S; } };
 }

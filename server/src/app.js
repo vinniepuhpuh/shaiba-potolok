@@ -270,6 +270,20 @@ export function buildApp({ pool, cfg, logger = true, online = null }) {
     reply.header('Cache-Control', 'no-store');
     return online.market(softUid(req));
   });
+  app.get('/api/online/academy', async (req, reply) => {
+    if (!online || !online.active) return reply.code(404).send({ error: 'no_season' });
+    reply.header('Cache-Control', 'no-store');
+    const r = online.academy(softUid(req));
+    if (r && r.error) return reply.code(409).send(r);
+    return r;
+  });
+  app.get('/api/online/staff', async (req, reply) => {
+    if (!online || !online.active) return reply.code(404).send({ error: 'no_season' });
+    reply.header('Cache-Control', 'no-store');
+    const r = online.staff(softUid(req));
+    if (r && r.error) return reply.code(409).send(r);
+    return r;
+  });
   app.get('/api/online/fin', { preHandler: auth }, async (req, reply) => {
     if (!online || !online.active) return reply.code(404).send({ error: 'no_season' });
     reply.header('Cache-Control', 'no-store');
@@ -286,7 +300,7 @@ export function buildApp({ pool, cfg, logger = true, online = null }) {
     if (!online || !online.active) return reply.code(404).send({ error: 'no_season' });
     return online.tradeEval(req.uid, req.body || {});
   });
-  for (const [path, fn] of [['sign', 'sign'], ['scout', 'scout'], ['os-sign', 'osSign'], ['release', 'release'], ['trade', 'trade'], ['trade/answer', 'answer'], ['prices', 'prices'], ['arena', 'arena']]) {
+  for (const [path, fn] of [['bid', 'bid'], ['poach', 'poachBid'], ['search', 'search'], ['take', 'take'], ['promote', 'promote'], ['upg', 'upg'], ['match', 'match'], ['release', 'release'], ['trade', 'trade'], ['trade/answer', 'answer'], ['prices', 'prices'], ['arena', 'arena'], ['coach/mode', 'coachMode'], ['coach/hire', 'coachHire'], ['sponsor', 'sponsor']]) {
     app.post('/api/online/' + path, { preHandler: auth }, async (req, reply) => {
       if (!online || !online.active) return reply.code(404).send({ error: 'no_season' });
       const r = await online[fn](req.uid, req.body || {});

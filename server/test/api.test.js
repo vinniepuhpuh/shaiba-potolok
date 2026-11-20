@@ -418,3 +418,76 @@ test('пуш-напоминания о матчах', async () => {
   const t1 = S.online.slots[1].t + preOf(S.online);
   assert.equal(dueNotifications(S, t1 - 9 * 60e3).length, 0, 'боту не шлём');
 });
+
+test('онлайн: академия, прокачки, торги вслепую', async () => {
+  const { createSeason, joinSeason, runDue, preOf } = await import('../src/league.js');
+  const { acadSearch, acadTake, acadPromote, buyUpg, bidFA, bidPoach, poachMatch, acadPlayers, inheritAcademy, ensureA } = await import('../src/academy.js');
+  const { marketTick } = await import('../src/market.js');
+  const { ensureFin } = await import('../src/fin.js');
+  const { loadGame } = await import('../src/engine.js');
+  const html = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../index.html');
+  const G = loadGame(html);
+  const now0 = Date.now();
+  const S = createSeason(G, { fastSec: 10 }, now0); // игровой день = 40 сек
+  const o = S.online;
+  joinSeason(S, 3, 42, 'Тест', now0);
+  joinSeason(S, 5, 43, 'Второй', now0);
+  ensureA(S); ensureFin(S);
+  // прокачки: деньги списываются, уровень растёт
+  let r = buyUpg(G, S, 42, { kind: 'scout' }, now0);
+  assert.equal(r.ok, true); assert.equal(r.lvl, 1);
+  r = buyUpg(G, S, 42, { kind: 'acad' }, now0);
+  assert.equal(r.lvl, 1);
+  // поиск: 5 кандидатов, кулдаун
+  assert.equal(acadSearch(G, S, 42, now0).ok, true);
+  assert.equal(acadSearch(G, S, 42, now0 + 1000).error, 'wait');
+  const cands = S.players.filter((p) => p.team === -4 && p.osTid === 3);
+  assert.equal(cands.length, 5);
+  assert.ok(cands.every((p) => p.pot > p.ovr && p.age >= 17 && p.age <= 19));
+  // набор в академию и в основу
+  assert.equal(acadTake(G, S, 42, { id: cands[0].id, to: 'acad' }, now0).ok, true);
+  assert.equal(acadTake(G, S, 42, { id: cands[1].id, to: 'main' }, now0).ok, true);
+  assert.equal(acadPlayers(S, 3).length, 1);
+  assert.equal(acadPlayers(S, 3)[0].team, -5, 'в академии не в составе');
+  // академия не под потолком: платёжка клуба не изменилась от игрока академии
+  const kid = acadPlayers(S, 3)[0];
+  assert.ok(kid.sal === 0 || kid.yrs === 0);
+  // рост в академии за 4 слота
+  for (let i = 0; i < 4; i++) { const sl = o.slots.find((s) => s.games.some((g) => !g.done)); runDue(G, S, sl.t + preOf(o)); }
+  assert.ok(kid.gx > 0 || kid.ovr > kid.ovr0, 'идёт рост');
+  // торги за свободного агента: ставки вслепую, выигрывает большая
+  const fa = S.players.find((p) => p.team === -1);
+  r = bidFA(G, S, 42, { id: fa.id, sal: 1000 }, now0);
+  assert.equal(r.leading, true);
+  r = bidFA(G, S, 43, { id: fa.id, sal: 1200 }, now0 + 1000);
+  assert.equal(r.leading, true, 'перебил — лидирует');
+  assert.equal(fa.team, -1, 'мгновенного подписания нет');
+  marketTick(S, now0 + 50_000, G);
+  assert.equal(fa.team, 5, 'после закрытия торгов агент у победителя');
+  assert.equal(fa.sal, 1200);
+  // переманивание: владелец повторяет ставку
+  kid.acadSince = now0 - 100 * 864e5;
+  assert.equal(bidPoach(G, S, 43, { id: kid.id, sal: 800 }, now0).ok, true);
+  marketTick(S, now0 + 50_000, G);
+  assert.equal(kid.team, -5, 'ещё в академии: стадия ответа владельца');
+  r = poachMatch(G, S, 42, { id: kid.id }, now0 + 51_000);
+  assert.equal(r.ok, true); assert.equal(kid.team, 3, 'владелец сохранил');
+  // переманивание без ответа: игрок уходит, компенсация владельцу
+  const kid2 = cands[2];
+  acadTake(G, S, 42, { id: kid2.id, to: 'acad' }, now0);
+  kid2.acadSince = now0 - 100 * 864e5;
+  const cash5 = o.fin[5].cash, cash3 = o.fin[3].cash;
+  bidPoach(G, S, 43, { id: kid2.id, sal: 900 }, now0 + 60_000);
+  marketTick(S, now0 + 110_000, G); // торги закрыты
+  marketTick(S, now0 + 140_000, G); // окно владельца истекло
+  assert.equal(kid2.team, 5, 'игрок переманен');
+  assert.ok(o.fin[3].cash > cash3, 'владельцу пришла компенсация');
+  assert.ok(o.fin[5].cash < cash5, 'переманивший заплатил');
+  // наследование: топ-2 академии переходят в новый сезон
+  acadTake(G, S, 42, { id: cands[3].id, to: 'acad' }, now0);
+  const S2 = createSeason(G, { fastSec: 10 }, now0 + 200 * 864e5);
+  const n = inheritAcademy(G, S2, S, now0 + 200 * 864e5);
+  assert.ok(n >= 2, `наследники перенесены: ${n}`);
+  const inh = S2.players.filter((p) => p.team === -5);
+  assert.ok(inh.every((p) => p.age >= 18), 'возраст +1 год');
+});
