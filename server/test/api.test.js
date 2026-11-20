@@ -259,12 +259,13 @@ test('онлайн-сезон: создание, вход, расчёт, тра�
     const fa = mk.fa.find((p) => p.ask <= room) || mk.fa[mk.fa.length - 1];
     r = await oapp.inject({ method: 'POST', url: '/api/online/bid', headers: H, payload: { id: fa.id, sal: Math.min(room, Math.round(fa.ask * 1.3 / 10) * 10) } });
     assert.ok(r.json().ok, r.body);
-    r = await oapp.inject({ method: 'POST', url: '/api/online/scout', headers: H });
+    // поиск молодых в академию: раз в 2 игровых дня, 5 кандидатов
+    r = await oapp.inject({ method: 'POST', url: '/api/online/search', headers: H });
     assert.ok(r.json().ok, r.body);
-    r = await oapp.inject({ method: 'POST', url: '/api/online/scout', headers: H });
-    assert.equal(r.json().error, 'os_today');
-    mk = (await oapp.inject({ method: 'GET', url: '/api/online/market', headers: H })).json();
-    assert.equal(mk.my.os.length, 3);
+    r = await oapp.inject({ method: 'POST', url: '/api/online/search', headers: H });
+    assert.equal(r.json().error, 'wait');
+    const ac = (await oapp.inject({ method: 'GET', url: '/api/online/academy', headers: H })).json();
+    assert.equal(ac.cands.length, 5, 'скауты привезли пятерых кандидатов');
     r = await oapp.inject({ method: 'GET', url: '/api/online/market' });
     assert.equal(r.json().my, null, 'без входа — без личного списка');
     // обмен с компьютером: даром не отдаёт, за сильного отдаёт слабого
