@@ -257,7 +257,7 @@ test('онлайн-сезон: создание, вход, расчёт, тра�
     assert.ok(mk.open.fa && mk.open.trade && mk.fa.length > 10 && mk.my.team === 3);
     const room = mk.my.cap - mk.my.pay;
     const fa = mk.fa.find((p) => p.ask <= room) || mk.fa[mk.fa.length - 1];
-    r = await oapp.inject({ method: 'POST', url: '/api/online/sign', headers: H, payload: { id: fa.id, sal: Math.min(room, Math.round(fa.ask * 1.3 / 10) * 10), yrs: fa.askY > 5 ? 5 : fa.askY } });
+    r = await oapp.inject({ method: 'POST', url: '/api/online/bid', headers: H, payload: { id: fa.id, sal: Math.min(room, Math.round(fa.ask * 1.3 / 10) * 10) } });
     assert.ok(r.json().ok, r.body);
     r = await oapp.inject({ method: 'POST', url: '/api/online/scout', headers: H });
     assert.ok(r.json().ok, r.body);
@@ -309,9 +309,9 @@ test('онлайн-сезон: создание, вход, расчёт, тра�
     const cutRow = mk.fa.find((p) => p.id === cut.id);
     assert.equal(cutRow && cutRow.rel, 'mine', 'свой расторгнутый помечен');
     // вернуть своего нельзя, другому человеку — только через 24 часа
-    r = await oapp.inject({ method: 'POST', url: '/api/online/sign', headers: H2, payload: { id: cut.id, sal: mk.maxSal, yrs: 1 } });
+    r = await oapp.inject({ method: 'POST', url: '/api/online/bid', headers: H2, payload: { id: cut.id, sal: mk.maxSal } });
     assert.equal(r.json().error, 'released_by_you', r.body);
-    r = await oapp.inject({ method: 'POST', url: '/api/online/sign', headers: H, payload: { id: cut.id, sal: mk.maxSal, yrs: 1 } });
+    r = await oapp.inject({ method: 'POST', url: '/api/online/bid', headers: H, payload: { id: cut.id, sal: mk.maxSal } });
     assert.equal(r.json().error, 'released_lock', r.body);
     assert.equal(online.market(a.user.id, Date.now() + 25 * 3600e3).fa.find((p) => p.id === cut.id).rel, null, 'через 24 часа доступен');
     // ещё два бесплатных, четвёртое — половина зарплаты под потолком
