@@ -44,6 +44,21 @@ if (fs.existsSync(gameHtml)) {
 } else console.warn(`онлайн-режим выключен: нет ${gameHtml}`);
 const app = buildApp({ pool, cfg, online });
 if (online) setInterval(() => online.tick().catch((e) => app.log.error({ err: e }, 'online tick failed')), 5000).unref();
+// Пуши от бота: за 10 минут до матча — напоминание менеджеру, чтобы успел зайти и взять бонус присутствия
+if (online) setInterval(async () => {
+  try {
+    const list = await online.notify();
+    for (const n of list) {
+      const row = (await pool.query('SELECT tg_id FROM users WHERE id=$1', [n.uid])).rows[0];
+      if (!row || row.tg_id == null) continue; // аккаунт устройства без привязанного Telegram — пушить некуда
+      await tg(cfg, 'sendMessage', {
+        chat_id: row.tg_id,
+        text: n.text,
+        reply_markup: { inline_keyboard: [[{ text: '🏒 К матчу', web_app: { url: cfg.gameUrl } }]] },
+      }).catch((e) => app.log.warn(`push ${n.uid}: ${e.message}`));
+    }
+  } catch (e) { app.log.error({ err: e }, 'online notify failed'); }
+}, 20000).unref();
 await app.listen({ host: '0.0.0.0', port: Number(env.PORT || 3000) });
 
 // Регистрируем вебхук бота, если задан публичный адрес

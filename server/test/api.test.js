@@ -396,3 +396,25 @@ test('онлайн-сезон: создание, вход, расчёт, тра�
     assert.equal(again.view(null, first.t + 366 * 864e5).champ, end.champ);
   } finally { await oapp.close(); }
 });
+
+test('пуш-напоминания о матчах', async () => {
+  const { createSeason, dueNotifications, preOf } = await import('../src/league.js');
+  const { loadGame } = await import('../src/engine.js');
+  const html = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../index.html');
+  const G = loadGame(html);
+  const now = Date.now();
+  const S = createSeason(G, { fastSec: 3600 }, now); // слоты раз в час, первый через час
+  S.online.humans[0] = { uid: 42, name: 'Тест' };
+  const t0 = S.online.slots[0].t + preOf(S.online);
+  assert.equal(dueNotifications(S, t0 - 11 * 60e3).length, 0, 'до окна пушей нет');
+  const n1 = dueNotifications(S, t0 - 9 * 60e3);
+  assert.equal(n1.length, 1, 'один менеджер — один пуш');
+  assert.equal(n1[0].uid, 42);
+  assert.match(n1[0].text, /Через 10 минут/);
+  assert.equal(dueNotifications(S, t0 - 8 * 60e3).length, 0, 'повторно не шлём');
+  assert.equal(dueNotifications(S, t0 + 60e3).length, 0, 'после старта слота не шлём');
+  // клуб у бота — пушей нет
+  S.online.humans[0].bot = true;
+  const t1 = S.online.slots[1].t + preOf(S.online);
+  assert.equal(dueNotifications(S, t1 - 9 * 60e3).length, 0, 'боту не шлём');
+});

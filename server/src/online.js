@@ -3,7 +3,7 @@ import { loadGame } from './engine.js';
 import { marketView, signFA, scoutOS, signOS, releasePlayer, tradeCheck, proposeTrade, answerTrade, marketTick } from './market.js';
 import { ensureFin, finView, setPrices, buyArena } from './fin.js';
 import { assignDerby, markDerby, finalize, ratingFrom, isDerby } from './awards.js';
-import { createSeason, runDue, publicView, joinSeason, teamView, setPlan, setLines, markPresence, preOf } from './league.js';
+import { createSeason, runDue, publicView, joinSeason, teamView, setPlan, setLines, markPresence, preOf, dueNotifications } from './league.js';
 
 /** Онлайн-режим: один активный сезон в памяти, все изменения по очереди, состояние сохраняется в базу. */
 export function makeOnline(pool, htmlPath, log = console) {
@@ -124,6 +124,15 @@ export function makeOnline(pool, htmlPath, log = console) {
     return { gid, t, home: row.home, away: row.away, kind: row.kind, started: true, done, liveMs, total: ticks.length, ticks: ticks.slice(0, n), ev, res: done ? row.res : null, box: done ? row.box : null, rost: row.box && row.box.rost, gk: row.box && row.box.gkId, sty: row.box && row.box.sty, ...pres };
   }
   function team(tid, uid) { if (!S) return null; return teamView(G, S, tid, uid); }
+  /** Пуш-напоминания о матчах, которые пора отправить (список {uid, text}); отметки сохраняются в состоянии. */
+  async function notify(now = Date.now()) {
+    return q(async () => {
+      if (!S) return [];
+      const list = dueNotifications(S, now);
+      if (list.length) await save();
+      return list;
+    });
+  }
   async function plan(uid, key, p, now = Date.now()) {
     return q(async () => { if (!S) return { error: 'no_season' }; const r = setPlan(S, uid, key, p, now); if (r.ok) await save(); return r; });
   }
@@ -145,7 +154,7 @@ export function makeOnline(pool, htmlPath, log = console) {
     return tradeCheck(G, S, +e[0], Number(b.to), (b.give || []).map(Number), (b.get || []).map(Number), now);
   }
   function fin(uid, now = Date.now()) { if (!S) return { error: 'no_season' }; return finView(S, uid, now, isDerby); }
-  return { init, tick, create, view, join, touch, game, team, plan, lines, market, tradeEval, fin, rating,
+  return { init, tick, create, view, join, touch, game, team, plan, lines, market, tradeEval, fin, rating, notify,
     prices: mut(setPrices), arena: mut((G_, S_, uid) => buyArena(G_, S_, uid)),
     sign: mut(signFA), scout: mut((G_, S_, uid, b, now) => scoutOS(G_, S_, uid, now)), osSign: mut(signOS), release: mut(releasePlayer),
     trade: mut(proposeTrade), answer: mut((G_, S_, uid, b, now) => answerTrade(G_, S_, uid, String(b.id), String(b.action), now)),

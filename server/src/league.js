@@ -30,6 +30,7 @@ export const DEFAULT_CFG = {
 // молодые: потенциал +6…+9 — по прогону 40 сезонов титулы делятся между профилями примерно поровну
 const YG = [6, 9];
 const PRESENCE_EARLY = 10 * MIN; // «на арене» можно отметиться за 10 минут до начала и в первую минуту
+const NOTIFY_BEFORE = 10 * MIN; // пуш от бота за 10 минут до матча (совпадает с окном отметки «на арене»)
 export const preOf = (o) => (o.cfg.preSec ?? 0) * 1000; // у сезонов, созданных до появления разминки, её нет
 const PROFILES = ['young', 'mixed', 'vet', 'young', 'mixed', 'vet', 'young', 'mixed'];
 export const PROFILE_NAMES = { young: 'Молодая', mixed: 'Смешанная', vet: 'Опытная' };
@@ -416,6 +417,42 @@ export function setLines(G, S, uid, body, now = Date.now()) {
     h.lines = { f: L.f.map((l) => l.slice()), d: L.d.map((l) => l.slice()), g: L.g.slice() }; h.lmode = null;
   } else { h.lines = null; h.lmode = null; }
   return { ok: true, lines: linesFor(G, S, tid) };
+}
+
+/** Пуш-напоминания о матчах: за NOTIFY_BEFORE до старта слота — по сообщению каждому менеджеру о его игре. */
+export function dueNotifications(S, now = Date.now()) {
+  const o = S.online, out = [];
+  if (!o || o.champ != null) return out;
+  o.notified = o.notified || {};
+  const msk = (t) => new Date(t + MSK).toISOString().slice(11, 16);
+  const W = o.cfg.seriesWins;
+  for (const slot of o.slots) {
+    if (o.notified[slot.i]) continue;
+    const start = slot.t + preOf(o);
+    if (now < start - NOTIFY_BEFORE) break; // слоты идут по времени
+    o.notified[slot.i] = true;
+    if (now >= start + 5 * MIN) continue; // сервер был выключен и опоздал: не спамим задним числом
+    for (const g of slot.games) {
+      if (g.done) continue;
+      let seriesInfo = '';
+      if (slot.kind === 'po') {
+        const s = o.po.rounds[slot.round][g.series];
+        if (s.wa >= W || s.wb >= W) continue; // серия решена, матча не будет
+        const sc = g.h === s.a ? `${s.wa}:${s.wb}` : `${s.wb}:${s.wa}`;
+        seriesInfo = `Матч ${slot.g + 1} серии (счёт ${sc}). `;
+      }
+      const H = S.teams[g.h], A = S.teams[g.a];
+      for (const tid of [g.h, g.a]) {
+        const m = o.humans[tid];
+        if (!m || m.bot || m.uid == null) continue;
+        const derby = g.derby ? ' 🔥 Дерби!' : '';
+        out.push({ uid: m.uid, slot: slot.i, gid: g.id,
+          text: `🏒 Через 10 минут: «${H.name}» — «${A.name}» (${msk(start)} МСК).${derby}\n` +
+                `${seriesInfo}Зайдите в игру к началу: поддержка менеджера на арене даёт клубу бонус.` });
+      }
+    }
+  }
+  return out;
 }
 
 /** Менеджер открыл свой матч к началу: отмечаем присутствие (окно — 10 минут до и первая минута после старта). */
