@@ -2897,7 +2897,7 @@ function act(a,id){
     case 'linkTg':linkStart();break;
     case 'nick':U.nickMsg=null;U.sheet={type:'nick'};break;
     case 'nickGo':nickSave();return;
-    case 'nickSkip':CL.needName=false;U.sheet=null;break;
+    case 'nickSkip':CL.needName=false;try{localStorage.setItem('gm_nickskip','1');}catch(e){}U.sheet=null;break;
     case 'codeOpen':U.codeMsg=null;U.sheet={type:'code'};break;
     case 'codeGo':{const el=document.getElementById('codeIn');U.codeMsg=useCode(el?el.value:'');if(U.codeMsg.ok){inv();}break;}
     case 'cloudTake':{U.sheet=null;stopTimer();const app=document.getElementById('app');if(app)app.innerHTML='<p class="muted" style="padding:48px 16px;text-align:center">Загружаю сохранение…</p>';
@@ -3099,7 +3099,7 @@ async function cloudAuth(){
   if(r.status===403){try{const j=await r.json();if(j.error==='banned')CL.banned=j.reason||'Аккаунт заблокирован.';}catch(e){}throw new Error('banned');}
   if(!r.ok)throw new Error('auth '+r.status);
   const a=await r.json();CL.token=a.token;CL.on=true;CL.st='ok';CL.linked=tg||!!(a.user&&a.user.linked);CL.uid=a.user&&a.user.id;
-  CL.nick=a.user&&a.user.nick||null;CL.name=(a.user&&a.user.name)||null;CL.needName=!!(a.user&&a.user.created&&!CL.nick);return a;
+  CL.nick=a.user&&a.user.nick||null;CL.name=(a.user&&a.user.name)||null;CL.needName=!!(!CL.nick&&!localStorage.getItem('gm_nickskip'));return a;
 }
 async function cloudPull(){
   const r=await apiF('/api/save',{},15000);
