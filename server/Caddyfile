@@ -13,7 +13,7 @@ gmhockey.ru, www.gmhockey.ru, {$DOMAIN} {
 		format json
 	}
 
-	@backend path /api/* /bot/* /admin /privacy
+	@backend path /api/* /bot/* /admin /admin/* /privacy
 	handle @backend {
 		reverse_proxy api:3000
 	}
