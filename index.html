@@ -1970,6 +1970,7 @@ function load(){try{const s=localStorage.getItem(KEY);if(s){const o=JSON.parse(s
 
 /* ---------- changelog ---------- */
 const CHANGES=[
+  {v:'2026-11-21a',d:'21 ноября',t:'Мои турниры',items:['Онлайн-лига стала мультисезонной: параллельно может идти несколько турниров, и можно играть сразу в нескольких — до трёх одновременно.','Экран «Мои турниры» — новая точка входа в онлайн: ваши сезоны с местом и следующим матчем (у идущих матчей плашка LIVE), открытые лиги с кнопкой «Вступить» и завершённые с чемпионами.','Кнопка со стрелкой в шапке турнира возвращает к списку лиг.','Напоминания бота о матчах подписаны именем турнира, а кнопка «К матчу» открывает нужную лигу сразу.']},
   {v:'2026-11-20c',d:'20 ноября',t:'Тренеры, спонсоры и большая лига',items:['Главный тренер: у каждого профиль стилей — один любимый (стиль даёт ещё +20%), два хороших (+10%), остальные без бонуса. Стартовый тренер подобран под состав клуба.','Рынок тренеров: главного можно сменить на свободного специалиста, но не больше двух замен за сезон.','Тренер по физподготовке: переключатель «основа / академия». Работа с основой со временем даёт до +3 к силе состава и ускоряет рост игроков к потенциалу; переключитесь на академию — шкала основы падает, зато воспитанники растут быстрее. Шкала обновляется каждый игровой день.','Клуб, набравший хорошую форму, отмечен значком 🔥 рядом с названием — точное значение шкалы соперникам не видно.','Титульный спонсор: три контракта на выбор. Больше денег — жёстче требования к месту в таблице и плей-офф; скромнее деньги — больше очков рейтинга. Выплаты каждую неделю сезона, бонус — по итогам.','Большая лига: 32 клуба в двух конференциях, 82 матча регулярного чемпионата (26 с соперниками по дивизиону, 24 по конференции, 32 межконференционных), плей-офф по 8 клубов от конференции, финал — между чемпионами конференций.']},
   {v:'2026-11-20b',d:'20 ноября',t:'Академия и торги вслепую',items:['Молодёжная академия: скауты раз в 2 игровых дня привозят 5 кандидатов 17–19 лет. Взять можно любое число — в академию бесплатно или сразу в основу по контракту новичка.','Воспитанники не занимают место в составе и не сидят под потолком, растут ускоренно. Не переведёте в основу вовремя — соперники начнут торги.','Потенциал кандидатов виден расплывчато; скаутская служба (5 уровней) сужает разброс и повышает шанс найти самородка, академия (5 уровней) добавляет места и ускоряет рост.','Переманивание — торги вслепую: ставки соперников не видны, игрок сразу идёт в основной состав. Владелец видит лучшую ставку и может её повторить, чтобы оставить игрока.','Свободные агенты — тоже торги вслепую: мгновенного подписания больше нет, игрок уходит лучшему предложению через игровой день. Свою ставку можно только повышать.','Два лучших воспитанника переходят в академию вашего клуба в следующем сезоне.','Баланс стилей: зеркальный матчап (одинаковые стили) больше не даёт преимущества никому, а в серии плей-офф повтор одного стиля подряд теряет силу: 100 → 85 → 70 → 55%.']},
   {v:'2026-11-20a',d:'20 ноября',t:'Бот напоминает о матчах',items:['За 10 минут до матча вашего клуба бот @hmrurubot присылает напоминание с кнопкой «К матчу».','Зайдите в игру к началу: поддержка менеджера на арене даёт клубу бонус к шансам на победу.','В плей-офф в напоминании видно номер матча и счёт в серии. О дерби бот сообщает особо.']},
@@ -3152,7 +3153,9 @@ function boot(data){
   window.addEventListener('resize',()=>tourPlace());window.addEventListener('scroll',()=>{if(U.tour)tourPlace();},{passive:true});
   if(S.live)U.mv={seg:'feed',spd:0,lines:false};
   if(CL.conflict)U.sheet={type:'cloud'};
-  U.mode='menu';U.sheet=CL.conflict?{type:'cloud'}:null;oPollStart();if(oOk())oLoad(true);
+  U.mode='menu';U.sheet=CL.conflict?{type:'cloud'}:null;oPollStart();
+  const oDeep=deepSid();if(oDeep&&oOk()){OL.sid=oDeep;oModeSet(true);}
+  if(oOk())oLoad(true);
   render();
   track('open',{v:VER,s:S.season});
   if(CL.dirty&&!CL.conflict)setTimeout(()=>cloudPush(false),1500);
@@ -3464,7 +3467,10 @@ function viewLeague(){
 }
 /* ---------- онлайн-лига ---------- */
 const oEsc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const OL={ms:'fa',mk:null,ac:null,tr:null,offer:null,confirm:null,v:null,err:null,loading:false,at:0,skew:0,team:{},tab:'home',gm:null,sel:null,planK:'def',past:false,mine:false,busy:false};
+const OL={ms:'fa',mk:null,ac:null,st:null,tr:null,offer:null,confirm:null,v:null,err:null,tours:null,tourErr:null,loading:false,at:0,skew:0,team:{},tab:'home',gm:null,sel:null,planK:'def',past:false,mine:false,busy:false,sid:null};
+const oUrl=(p='')=>'/api/online/'+OL.sid+p;
+/* deep-link из пуша бота: ?sid=N (или tgWebAppStartParam внутри Telegram) открывает турнир сразу */
+const deepSid=()=>{try{const q=new URLSearchParams(location.search);const s=q.get('sid')||q.get('tgWebAppStartParam')||(TG&&TG.initDataUnsafe&&TG.initDataUnsafe.start_param)||'';return /^[1-9]\d*$/.test(s)?+s:null;}catch(e){return null;}};
 const OS={teams:[],players:[],chem:{},box:[],user:null};
 function withOS(fn){const s0=S;S=OS;try{return fn();}finally{S=s0;}}
 const PROFN={young:'Молодая',mixed:'Смешанная',vet:'Опытная'};
@@ -3495,23 +3501,29 @@ async function oPost(path,body){
 const OERR={deadline:'Вход в сезон уже закрыт.',taken:'Этот клуб уже занят другим менеджером.',already:'Вы уже управляете клубом в этом сезоне.',started:'Матч уже начался: план не поменять.',not_joined:'Сначала выберите клуб.',bad_lines:'Звенья не сохранились: проверьте состав.',no_season:'Сезона сейчас нет.'};
 async function oLoad(quiet){
   if(!oOk()){OL.err='nosrv';render();return;}
-  if(OL.loading)return;OL.loading=true;if(!quiet&&!OL.v)render();
+  if(OL.loading)return;OL.loading=true;if(!quiet&&!OL.v&&!OL.tours)render();
   try{
     if(!CL.token&&cloudable())await oAuth();
-    const t0=Date.now(),v=await oGet('/api/online');
-    if(v){OL.skew=v.now-(t0+Date.now())/2;OL.v=v;OL.err=null;OS.teams=v.teams;if(!oTourSeen()&&!U.tour&&U.mode==='online'&&!OL.gm)oTourStart();}else{OL.v=null;OL.err='none';}
-    OL.at=Date.now();
-    const my=oMy();if(my!=null&&(!OL.team[my]||quiet!=='keep'))await oTeam(my);
-    if(my!=null||OL.tab==='market')try{const m=await oGet('/api/online/market');if(m)OL.mk=m;}catch(e){}
-    if(my!=null)try{const a=await oGet('/api/online/academy');if(a)OL.ac=a;}catch(e){}
-    if(my!=null)try{const s=await oGet('/api/online/staff');if(s)OL.st=s;}catch(e){}
-    if(my!=null)await oFinLoad();
-  }catch(e){if(!OL.v)OL.err='net';}
+    if(!OL.sid){
+      // экран «Мои турниры»: список лиг
+      try{OL.tours=await oGet('/api/seasons');OL.tourErr=null;}catch(e){OL.tourErr='net';}
+      OL.at=Date.now();
+    }else{
+      const t0=Date.now(),v=await oGet(oUrl());
+      if(v){OL.skew=v.now-(t0+Date.now())/2;OL.v=v;OL.err=null;OS.teams=v.teams;if(!oTourSeen()&&!U.tour&&U.mode==='online'&&!OL.gm)oTourStart();}else{OL.v=null;OL.err='none';}
+      OL.at=Date.now();
+      const my=oMy();if(my!=null&&(!OL.team[my]||quiet!=='keep'))await oTeam(my);
+      if(my!=null||OL.tab==='market')try{const m=await oGet(oUrl('/market'));if(m)OL.mk=m;}catch(e){}
+      if(my!=null)try{const a=await oGet(oUrl('/academy'));if(a)OL.ac=a;}catch(e){}
+      if(my!=null)try{const s=await oGet(oUrl('/staff'));if(s)OL.st=s;}catch(e){}
+      if(my!=null)await oFinLoad();
+    }
+  }catch(e){if(OL.sid){if(!OL.v)OL.err='net';}else OL.tourErr='net';}
   finally{OL.loading=false;}
   if(U.mode!=='career')render();
 }
-async function oFinLoad(){try{const f=await oGet('/api/online/fin');if(f)OL.fin=f;}catch(e){}}
-async function oTeam(id){try{const t=await oGet('/api/online/team/'+id);if(t)OL.team[id]=t;}catch(e){}}
+async function oFinLoad(){try{const f=await oGet(oUrl('/fin'));if(f)OL.fin=f;}catch(e){}}
+async function oTeam(id){try{const t=await oGet(oUrl('/team/'+id));if(t)OL.team[id]=t;}catch(e){}}
 let _oPoll=null;
 function oPollStart(){if(_oPoll)return;_oPoll=setInterval(()=>{if(U.mode==='career'||document.hidden)return;if(Date.now()-OL.at>(oLiveNow()?20000:60000))oLoad(true);},5000);}
 const oLiveNow=()=>OL.v&&OL.v.slots.some(s=>s.games.some(g=>g.live));
@@ -3529,7 +3541,30 @@ function oGameRow(s,g,me){
 function oHeader(){
   const v=OL.v,my=oMy(),t=my!=null?oT(my):null;
   const sub=!v?'Онлайн-лига':`${v.name}${t?' · '+oRec(t):''}`;
-  return `<header class="top gut"><div class="top-row">${t?badge(t,44):'<span class="obig">🏒</span>'}<div class="top-name"><h1>${t?`${t.city} ${t.name}`:'Онлайн-лига'}</h1><small>${sub}</small></div><button class="icon-btn" data-tut="o-mode" data-a="mGo" data-id="menu" aria-label="Главное меню">${HOME_IC}</button><button class="icon-btn" data-a="menu" aria-label="Меню">${ICON.menu}</button></div></header>`;
+  const back=OL.sid?`<button class="icon-btn" data-a="oTours" aria-label="Мои турниры" title="Мои турниры"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg></button>`:'';
+  return `<header class="top gut"><div class="top-row">${t?badge(t,44):'<span class="obig">🏒</span>'}<div class="top-name"><h1>${t?`${t.city} ${t.name}`:'Онлайн-лига'}</h1><small>${sub}</small></div>${back}<button class="icon-btn" data-tut="o-mode" data-a="mGo" data-id="menu" aria-label="Главное меню">${HOME_IC}</button><button class="icon-btn" data-a="menu" aria-label="Меню">${ICON.menu}</button></div></header>`;
+}
+/* экран «Мои турниры» — точка входа в онлайн */
+function oViewTours(){
+  if(OL.tourErr==='net')return `<section class="card"><h2>Нет связи</h2><p>Не удалось получить список турниров.</p><button class="btn pri" data-a="oReload">Повторить</button></section>`;
+  const T=OL.tours;
+  if(!T)return `<section class="card"><p class="muted">Загружаю турниры…</p></section>`;
+  let h='';
+  if(T.mine&&T.mine.length){
+    h+=`<section class="card"><h2>Мои турниры<span>${T.mine.length}</span></h2><div class="list">${T.mine.map(m=>
+      `<button class="prow" data-a="oOpen" data-id="${m.sid}"><span class="pn"><b>${oEsc(m.name)}${m.test?' <small class="otag">тест</small>':''}</b><small>${oEsc(m.club)} · ${m.place}-е место${m.next?` · следующий матч: ${oWhen(m.next.t)} против «${oEsc(m.next.opp)}»`:''}${m.bot?' · клуб ведёт компьютер':''}</small>${m.live?'<small class="olive">● LIVE</small>':''}</span><span style="opacity:.45;font-weight:600">→</span></button>`).join('')}</div></section>`;
+  }
+  if(T.open&&T.open.length){
+    h+=`<section class="card" data-tut="o-club"><h2>Открытые лиги<span>${T.open.length}</span></h2><div class="list">${T.open.map(o=>
+      `<div class="osrow"><span class="pn"><b>${oEsc(o.name)}${o.test?' <small class="otag">тест</small>':''}</b><small>${o.big?'32 клуба · большая лига':'8 клубов'} · занято ${o.humans} из ${o.teams} · старт: ${oWhen(o.start)} · вход до ${oWhen(o.deadlineT)}</small></span><button class="btn sm pri" data-a="oOpen" data-id="${o.sid}">Вступить</button></div>`).join('')}</div>
+      ${!CL.token&&cloudable()?'<p class="small muted">Войдите через Telegram, чтобы занять клуб в турнире.</p>':''}</section>`;
+  }
+  if(T.done&&T.done.length){
+    h+=`<section class="card"><h2>Завершённые<span>${T.done.length}</span></h2><div class="list">${T.done.map(d=>
+      `<button class="prow" data-a="oOpen" data-id="${d.sid}"><span class="pn"><b>${oEsc(d.name)}${d.test?' <small class="otag">тест</small>':''}</b><small>чемпион — «${oEsc(d.champ||'—')}»${d.myPlace!=null?` · вы заняли ${d.myPlace}-е место`:''}</small></span><span style="opacity:.45;font-weight:600">→</span></button>`).join('')}</div></section>`;
+  }
+  if(!h)h=`<section class="card"><h2>Турниров пока нет</h2><p class="small">Новые сезоны объявим в канале игры. А пока можно играть карьеру.</p></section>`;
+  return h;
 }
 function oTabs(){
   const L=[['home','Сезон','club'],['games','Матчи','league'],['table','Таблица','fin'],['roster','Состав','roster'],['market','Рынок','market']];
@@ -3537,7 +3572,7 @@ function oTabs(){
 }
 function oEmpty(){
   if(OL.err==='nosrv')return `<section class="card"><h2>Онлайн-лига</h2><p>Онлайн-лига работает в Telegram (бот @hmrurubot), на сайте gmhockey.ru и в приложении.</p></section>`;
-  if(OL.err==='none')return `<section class="card"><h2>Сезона пока нет</h2><p>Онлайн-сезон ещё не объявлен. О старте напишем в канале игры.</p><p class="small muted">А пока можно играть карьеру: кнопка «Карьера» вверху.</p></section>`;
+  if(OL.err==='none')return `<section class="card"><h2>Турнир не найден</h2><p>Такого турнира нет, он завершился и убран из просмотра или в нём нет мест.</p><button class="btn pri" data-a="oTours">К списку турниров</button></section>`;
   if(OL.err==='net')return `<section class="card"><h2>Нет связи</h2><p>Не удалось получить данные лиги.</p><button class="btn pri" data-a="oReload">Повторить</button></section>`;
   return `<section class="card"><p class="muted">Загружаю лигу…</p></section>`;
 }
@@ -3681,7 +3716,7 @@ async function oPlanSet(patch){
   const cur=Object.assign({},k==='def'?oPlanOf('def'):(oPlanOf(k)||oPlanOf('def')||{}),patch);
   Object.keys(cur).forEach(x=>{if(cur[x]===''||cur[x]==null)delete cur[x];});
   tv.plans=tv.plans||{};tv.plans[k]=cur;render();
-  const r=await oPost('/api/online/plan',{key:k,plan:cur});if(r){tv.plans=r.plans;render();}else oTeam(my).then(render);
+  const r=await oPost(oUrl('/plan'),{key:k,plan:cur});if(r){tv.plans=r.plans;render();}else oTeam(my).then(render);
 }
 /* ---------- звенья ---------- */
 const oPM=tv=>new Map(tv.players.map(p=>[p.id,p]));
@@ -3717,7 +3752,7 @@ function oPRow(p,a){
   const pot=p.pot!=null&&p.pot>p.ovr?` · пот. ${p.pot}`:'',gr=p.d?` · <span class="${p.d>0?'ok':'bad'}">${p.d>0?'+':''}${p.d}</span>`:'';
   return `<button class="prow${p.sal?'':' o3'}${cur?' sel':''}" ${a?`data-a="${a}" data-id="${p.id}"`:'disabled'}>${posB(p)}<span class="pn"><b>${nm(p)}${p.inj?' 🩹':''}</b><small>${p.age} л · ${flag(p.nat)}${p.role?' · '+ROLE_S[p.role]:''}${stat}${pot}${gr}${p.inj?` · травма, ${p.inj} дн.`:''}</small></span><span class="ovr ${tier(p.ovr)}">${p.ovr}</span>${oMoney(p)}</button>`;
 }
-async function oLinesSend(body){const my=oMy(),tv=OL.team[my];const r=await oPost('/api/online/lines',body);if(r&&tv){tv.lines=r.lines;tv.manual=!!body.lines||!!body.mode;}render();}
+async function oLinesSend(body){const my=oMy(),tv=OL.team[my];const r=await oPost(oUrl('/lines'),body);if(r&&tv){tv.lines=r.lines;tv.manual=!!body.lines||!!body.mode;}render();}
 function oSlotTap(id){
   const tv=OL.team[oMy()];if(!tv)return;
   if(!OL.sel){OL.sel=id;render();return;}
@@ -3769,7 +3804,7 @@ function oSetOS(d){
 }
 async function oWatch(gid){
   oStop();
-  let d;try{d=await oGet('/api/online/game/'+gid);}catch(e){toast('Нет связи.');return;}
+  let d;try{d=await oGet(oUrl('/game/'+gid));}catch(e){toast('Нет связи.');return;}
   if(!d){toast('Матч не найден.');return;}
   if(!d.started){
     OL.gm={gid,d,L:oNewL(d),i:0,mode:'pre',spd:0};oSetOS(d);aniReset();render();
@@ -3819,7 +3854,7 @@ async function oLiveLoop(){
   const end=oNow()>=d.t+d.liveMs;
   if((G.i>=d.ticks.length&&Date.now()-G.fetchAt>(end?2000:12000))||(end&&!d.done&&Date.now()-G.fetchAt>3000)){
     G.fetchAt=Date.now();
-    try{const n=await oGet('/api/online/game/'+G.gid);if(n&&OL.gm===G){G.d=n;if(n.done){while(G.i<n.ticks.length)oStep(G.i<n.ticks.length-1);oStop();G.mode='end';sfx('whistle');oLoad(true);render();}}}catch(e){}
+    try{const n=await oGet(oUrl('/game/'+G.gid));if(n&&OL.gm===G){G.d=n;if(n.done){while(G.i<n.ticks.length)oStep(G.i<n.ticks.length-1);oStop();G.mode='end';sfx('whistle');oLoad(true);render();}}}catch(e){}
   }
 }
 function oRecLoop(){const G=OL.gm;if(!G||G.mode!=='rec'){oStop();return;}if(!oStep(false)){oStop();G.mode='end';sfx('whistle');render();}}
@@ -3848,9 +3883,10 @@ function oMatchView(){
 function renderOnline(){
   const app=document.getElementById('app');
   let main;
-  if(!OL.v)main=oEmpty();
+  if(!OL.sid)main=oViewTours();
+  else if(!OL.v)main=oEmpty();
   else main={home:oViewHome,games:oViewGames,table:oViewTable,roster:oViewRoster,market:oViewMarket}[OL.tab]();
-  let html=oHeader()+`<main class="gut">${main}</main>`+(OL.v?oTabs():'');
+  let html=oHeader()+`<main class="gut">${main}</main>`+(OL.v&&OL.sid?oTabs():'');
   if(U.sheet){
     const s=U.sheet;let inner='';
     if(s.type==='oteam')inner=oSheetTeam(s.id);else if(s.type==='ooffer')inner=oSheetOffer();else if(s.type==='opl')inner=oSheetPl(s.id);else if(s.type==='orating')inner=oSheetRating();else if(s.type==='ojoin')inner=oSheetJoin(s.id);else if(s.type==='menu')inner=sheetMenu();else if(s.type==='wn')inner=sheetWhatsNew();else if(s.type==='help')inner=sheetHelp();else if(s.type==='tacinfo')inner=sheetTacInfo();else if(s.type==='cloud')inner=sheetCloud();else if(s.type==='code')inner=sheetCode();
@@ -3896,24 +3932,26 @@ const OACT={
   oTNext(){oTourGo(U.tour.i+1);},
   oTPrev(){oTourGo(U.tour.i-1);},
   oTSkip(){track('otour_skip',{i:U.tour?U.tour.i:0});U.tour=null;try{localStorage.setItem('gm-otour','1');}catch(e){}render();},
-  oMode(id){const on=id==='online';stopTimer();oModeSet(on);U.sheet=null;window.scrollTo(0,0);if(on){oPollStart();oLoad();}else{oStop();OL.gm=null;}render();},
+  oMode(id){const on=id==='online';stopTimer();oModeSet(on);U.sheet=null;window.scrollTo(0,0);if(on){oPollStart();OL.tab='home';oLoad();}else{oStop();OL.gm=null;}render();},
+  oTours(){oStop();ambStop();OL.gm=null;OL.sid=null;OL.v=null;OL.err=null;OL.team={};OL.mk=null;OL.ac=null;OL.st=null;window.scrollTo(0,0);oLoad(true);render();},
+  oOpen(id){OL.sid=+id||null;OL.v=null;OL.err=null;OL.team={};window.scrollTo(0,0);oLoad(true);render();},
   oTab(id){OL.tab=id;OL.sel=null;window.scrollTo(0,0);render();if((id==='roster'||id==='market')&&oMy()!=null)oTeam(oMy()).then(()=>render());if(id==='market'){oMk();oAc();oSt();}},
-  oReload(){OL.err=null;render();oLoad();},
-  async oRating(){OL.rt=null;U.sheet={type:'orating'};render();try{OL.rt=await oGet('/api/online/rating');}catch(e){OL.rt={top:[],me:null,history:[]};}render();},
+  oReload(){OL.err=null;OL.tourErr=null;render();oLoad();},
+  async oRating(){OL.rt=null;U.sheet={type:'orating'};render();try{OL.rt=await oGet(oUrl('/rating'));}catch(e){OL.rt={top:[],me:null,history:[]};}render();},
   async oPrA(id){const [k,a]=id.split('|'),f=OL.fin;if(!f)return;const cur=f[k],price=a==='1'?cur.price:(cur.auto?(k==='tix'?f.autoTix:f.autoJer):cur.price);
-    const r=await oPost('/api/online/prices',{[k]:{auto:a==='1',price}});if(r){f.tix=r.tix;f.jer=r.jer;}await oFinLoad();render();},
+    const r=await oPost(oUrl('/prices'),{[k]:{auto:a==='1',price}});if(r){f.tix=r.tix;f.jer=r.jer;}await oFinLoad();render();},
   async oPrD(id){const [k,d]=id.split('|'),f=OL.fin;if(!f)return;const lo=k==='jer'?50:f.priceMin,price=Math.max(lo,Math.min(f.priceMax,f[k].price+ +d));
-    f[k]={auto:false,price};render();clearTimeout(OL._prT);OL._prT=setTimeout(async()=>{await oPost('/api/online/prices',{[k]:{auto:false,price:f[k].price}});await oFinLoad();render();},500);},
+    f[k]={auto:false,price};render();clearTimeout(OL._prT);OL._prT=setTimeout(async()=>{await oPost(oUrl('/prices'),{[k]:{auto:false,price:f[k].price}});await oFinLoad();render();},500);},
   oArenaAsk(){OL.confirm='arena';render();},
   oArenaNo(){OL.confirm=null;render();},
-  async oArena(){OL.busy=true;render();const r=await oPost('/api/online/arena');OL.busy=false;OL.confirm=null;if(r){toast(`Арена расширена: ${oNum(r.cap)} мест.`);sfx('sign');track('online_arena');}await oFinLoad();render();},
+  async oArena(){OL.busy=true;render();const r=await oPost(oUrl('/arena'));OL.busy=false;OL.confirm=null;if(r){toast(`Арена расширена: ${oNum(r.cap)} мест.`);sfx('sign');track('online_arena');}await oFinLoad();render();},
   oPick(id){U.sheet={type:'ojoin',id:+id};render();},
-  async oJoin(id){U.sheet=null;render();const r=await oPost('/api/online/join',{team:+id});if(r){toast(`Вы — генменеджер «${oT(+id).name}»!`);track('online_join');await oLoad();OL.tab='home';render();}},
+  async oJoin(id){U.sheet=null;render();const r=await oPost(oUrl('/join'),{team:+id});if(r){toast(`Вы — генменеджер «${oT(+id).name}»!`);track('online_join');await oLoad();OL.tab='home';render();}},
   oTeam(id){U.sheet={type:'oteam',id:+id};render();oTeam(+id).then(()=>render());},
   oWatch(id){oWatch(id);},
   oClose(){oStop();ambStop();OL.gm=null;render();},
   oRec(){oRecStart();},
-  oBox(){oStop();if(OL.gm){OL.gm.mode='box';if(!OL.gm.d.box){oGet('/api/online/game/'+OL.gm.gid).then(n=>{if(n&&OL.gm){OL.gm.d=n;render();}});}}render();},
+  oBox(){oStop();if(OL.gm){OL.gm.mode='box';if(!OL.gm.d.box){oGet(oUrl('/game/'+OL.gm.gid)).then(n=>{if(n&&OL.gm){OL.gm.d=n;render();}});}}render();},
   oPP(){const G=OL.gm;if(!G)return;if(G.timer)oStop();else G.timer=setInterval(oRecLoop,SPD[G.spd]);render();},
   oSpd(){const G=OL.gm;if(!G)return;G.spd=(G.spd+1)%3;if(G.timer){oStop();G.timer=setInterval(oRecLoop,SPD[G.spd]);}render();},
   oPast(){OL.past=!OL.past;render();},
@@ -3924,7 +3962,7 @@ const OACT={
   oSty(id){oPlanSet({sty:id||null});},
   oRisk(id){oPlanSet({risk:id?+id:null});},
   oPull(id){oPlanSet({pull:id==='1'});},
-  async oPlanReset(){const my=oMy(),tv=OL.team[my],k=OL.planK;if(tv&&tv.plans)delete tv.plans[k];render();const r=await oPost('/api/online/plan',{key:k,plan:null});if(r&&tv){tv.plans=r.plans;render();}},
+  async oPlanReset(){const my=oMy(),tv=OL.team[my],k=OL.planK;if(tv&&tv.plans)delete tv.plans[k];render();const r=await oPost(oUrl('/plan'),{key:k,plan:null});if(r&&tv){tv.plans=r.plans;render();}},
   oSlot(id){oSlotTap(id);},
   oBench(id){const k='b|'+id;if(OL.sel&&!OL.sel.startsWith('b|'))oSlotTap(k);else{OL.sel=OL.sel===k?null:k;render();}},
   oAuto(id){OL.sel=null;oLinesSend(id?{mode:id}:{});toast(id?'Звенья собраны.':'Звенья будет собирать компьютер.');},
@@ -3932,9 +3970,9 @@ const OACT={
 
 /* ---------- онлайн-рынок ---------- */
 const OPOTH={high:'большой потенциал',mid:'перспективный'};
-async function oMk(){try{const m=await oGet('/api/online/market');if(m)OL.mk=m;}catch(e){}if(U.mode==='online')render();}
-async function oAc(){try{const a=await oGet('/api/online/academy');if(a)OL.ac=a;}catch(e){}if(U.mode==='online')render();}
-async function oSt(){try{const s=await oGet('/api/online/staff');if(s)OL.st=s;}catch(e){}if(U.mode==='online')render();}
+async function oMk(){try{const m=await oGet(oUrl('/market'));if(m)OL.mk=m;}catch(e){}if(U.mode==='online')render();}
+async function oAc(){try{const a=await oGet(oUrl('/academy'));if(a)OL.ac=a;}catch(e){}if(U.mode==='online')render();}
+async function oSt(){try{const s=await oGet(oUrl('/staff'));if(s)OL.st=s;}catch(e){}if(U.mode==='online')render();}
 const oRs=x=>{const m=OL.mk;return Math.min(m?m.maxSal:99999,Math.max(m?m.minSal:0,Math.round(x/100)*100));};
 const oFairSal=o=>Math.min((OL.mk?OL.mk.cap:80000)*.2,775+13*Math.max(0,o-60)**2);
 const oIncoming=()=>{const m=OL.mk,my=oMy();return m&&m.my?m.my.trades.filter(t=>t.status==='open'&&t.to===my).length:0;};
@@ -4077,7 +4115,7 @@ function oTradeEval(){
   const tr=OL.tr;tr.ev=null;clearTimeout(_oTE);
   if(!tr.give.length&&!tr.get.length){render();return;}
   render();
-  _oTE=setTimeout(async()=>{if(!(await oAuth()))return;try{const r=await apiF('/api/online/trade/eval',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:tr.to,give:tr.give,get:tr.get})},8000);if(r.ok&&OL.tr===tr){tr.ev=await r.json();render();}}catch(e){}},250);
+  _oTE=setTimeout(async()=>{if(!(await oAuth()))return;try{const r=await apiF(oUrl('/trade/eval'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:tr.to,give:tr.give,get:tr.get})},8000);if(r.ok&&OL.tr===tr){tr.ev=await r.json();render();}}catch(e){}},250);
 }
 /* свой игрок: расторжение */
 function oSheetPl(id){
@@ -4088,7 +4126,7 @@ function oSheetPl(id){
   ${OL.confirm==='rel'+id?`<p class="warn">Игрок уйдёт в свободные агенты. ${relTxt} Расторгнуть?</p><button class="btn pri" data-a="oRel" data-id="${id}">Да, расторгнуть</button>`:`<button class="btn" data-a="oRelAsk" data-id="${id}">Расторгнуть контракт</button>`}
   <button class="btn" data-a="close">Закрыть</button></div>`;
 }
-const OMERR={market_closed:'Рынок закрыт.',gone:'Игрок уже недоступен.',roster_full:'Состав полный: 26 игроков.',cap:'Контракт не помещается под потолок.',bad_offer:'Проверьте сумму ставки.',roster_min:'Нельзя: останется меньше 20 игроков.',goalies:'Нельзя: нужны два вратаря.',empty:'Выберите игроков.',too_many_open:'Не больше 5 открытых предложений.',expired:'Предложение истекло.',no_trade:'Предложение уже неактуально.',released_by_you:'Вы расторгли контракт с этим игроком — вернуть его до конца сезона нельзя.',released_lock:'Игрок только что расторг контракт: менеджерам он доступен через 24 часа.',no_cash:'В кассе не хватает денег.',arena_max:'Арена уже максимального размера.',season_over:'Сезон закончен.',bad_price:'Проверьте цену.',wait:'Скауты ещё не вернулись — следующий поиск позже.',acad_full:'Академия заполнена: улучшите её или переведите кого-то в основу.',bid_low:'Новая ставка должна быть выше вашей прежней.',match_stage:'Торги закрыты: владелец академии решает, повторять ли ставку.',no_match:'Повторять нечего: окно владельца уже закрыто.',own:'Это воспитанник вашей академии.',max:'Уже максимальный уровень.',bad_kind:'Неизвестное улучшение.',swap_max:'Лимит замен главного тренера исчерпан: не больше двух за сезон.',already:'Спонсор уже выбран.'};
+const OMERR={market_closed:'Рынок закрыт.',gone:'Игрок уже недоступен.',roster_full:'Состав полный: 26 игроков.',cap:'Контракт не помещается под потолок.',bad_offer:'Проверьте сумму ставки.',roster_min:'Нельзя: останется меньше 20 игроков.',goalies:'Нельзя: нужны два вратаря.',empty:'Выберите игроков.',too_many_open:'Не больше 5 открытых предложений.',expired:'Предложение истекло.',no_trade:'Предложение уже неактуально.',released_by_you:'Вы расторгли контракт с этим игроком — вернуть его до конца сезона нельзя.',released_lock:'Игрок только что расторг контракт: менеджерам он доступен через 24 часа.',no_cash:'В кассе не хватает денег.',arena_max:'Арена уже максимального размера.',season_over:'Сезон закончен.',bad_price:'Проверьте цену.',wait:'Скауты ещё не вернулись — следующий поиск позже.',acad_full:'Академия заполнена: улучшите её или переведите кого-то в основу.',bid_low:'Новая ставка должна быть выше вашей прежней.',match_stage:'Торги закрыты: владелец академии решает, повторять ли ставку.',no_match:'Повторять нечего: окно владельца уже закрыто.',own:'Это воспитанник вашей академии.',max:'Уже максимальный уровень.',bad_kind:'Неизвестное улучшение.',swap_max:'Лимит замен главного тренера исчерпан: не больше двух за сезон.',already:'Спонсор уже выбран.',seasons_max:'Одновременно можно играть не больше трёх турниров: сначала доиграйте один из текущих.',no_season:'Турнир не найден.'};
 Object.assign(OERR,OMERR);
 async function oMPost(path,body){OL.busy=true;render();const r=await oPost(path,body);OL.busy=false;return r;}
 Object.assign(OACT,{
@@ -4097,42 +4135,42 @@ Object.assign(OACT,{
   oOffer(id){const p=OL.mk.fa.find(x=>x.id===+id);if(!p)return;OL.offer={id:p.id,sal:oRs(p.myBid?p.myBid+100:p.ask)};U.sheet={type:'ooffer'};render();},
   oPOffer(id){const a=OL.ac,p=a&&a.others.find(x=>x.id===+id);if(!p)return;OL.offer={id:p.id,sal:oRs(Math.max(OL.mk.minSal,oFairSal(p.ovr)*.85)),poach:true};U.sheet={type:'ooffer'};render();},
   oSal(d){const o=OL.offer;o.sal=oRs(o.sal+ +d);U.keepSheet=true;render();},
-  async oBid(){const o=OL.offer;const r=await oMPost(o.poach?'/api/online/poach':'/api/online/bid',{id:o.id,sal:o.sal});
+  async oBid(){const o=OL.offer;const r=await oMPost(o.poach?oUrl('/poach'):oUrl('/bid'),{id:o.id,sal:o.sal});
     if(r&&r.ok){U.sheet=null;toast(r.leading?'Ставка принята — сейчас она лучшая.':'Ставка принята.');sfx('sign');track('online_sign');}
     await oMk();await oAc();const my=oMy();if(my!=null)oTeam(my).then(render);},
-  async oSearch(){const r=await oMPost('/api/online/search');if(r&&r.ok)toast('Скауты привезли пять кандидатов.');await oAc();},
-  async oTake(id){const [pid,to]=id.split('|');const r=await oMPost('/api/online/take',{id:+pid,to});
+  async oSearch(){const r=await oMPost(oUrl('/search'));if(r&&r.ok)toast('Скауты привезли пять кандидатов.');await oAc();},
+  async oTake(id){const [pid,to]=id.split('|');const r=await oMPost(oUrl('/take'),{id:+pid,to});
     if(r&&r.ok){toast(r.inAcad?'Игрок взят в академию.':'Новичок подписан в основной состав!');if(!r.inAcad)sfx('sign');}
     await oAc();await oMk();const my=oMy();if(my!=null)oTeam(my).then(render);},
-  async oPromote(id){const r=await oMPost('/api/online/promote',{id:+id});
+  async oPromote(id){const r=await oMPost(oUrl('/promote'),{id:+id});
     if(r&&r.ok){toast(`Воспитанник переведён в основу: контракт ${money(r.sal)}.`);sfx('sign');}
     await oAc();await oMk();const my=oMy();if(my!=null)oTeam(my).then(render);},
-  async oUpg(kind){const r=await oMPost('/api/online/upg',{kind});
+  async oUpg(kind){const r=await oMPost(oUrl('/upg'),{kind});
     if(r&&r.ok)toast(`${kind==='scout'?'Скаутская служба':'Молодёжная академия'} — уровень ${r.lvl}.`);
     await oAc();await oMk();oFinLoad();},
-  async oMatch(id){const r=await oMPost('/api/online/match',{id:+id});
+  async oMatch(id){const r=await oMPost(oUrl('/match'),{id:+id});
     if(r&&r.ok){toast(`Ставка повторена (${money(r.sal)}) — игрок остаётся у вас.`);sfx('sign');}
     await oAc();await oMk();const my=oMy();if(my!=null)oTeam(my).then(render);},
-  async oCMode(id){const r=await oMPost('/api/online/coach/mode',{mode:id});
+  async oCMode(id){const r=await oMPost(oUrl('/coach/mode'),{mode:id});
     if(r&&r.ok)toast(id==='acad'?'Физик переключён на академию: шкала пойдёт вниз.':'Физик работает с основой: шкала растёт.');
     await oSt();},
-  async oCHire(id){const r=await oMPost('/api/online/coach/hire',{id:+id});
+  async oCHire(id){const r=await oMPost(oUrl('/coach/hire'),{id:+id});
     if(r&&r.ok){toast('Тренер назначен.');sfx('sign');}
     await oSt();},
-  async oSponPick(id){const r=await oMPost('/api/online/sponsor',{id});
+  async oSponPick(id){const r=await oMPost(oUrl('/sponsor'),{id});
     if(r&&r.ok){toast('Титульный спонсор подписан!');sfx('sign');}
     await oSt();await oMk();oFinLoad();},
   oPl(id){OL.confirm=null;U.sheet={type:'opl',id:+id};render();},
   oRelAsk(id){OL.confirm='rel'+id;U.keepSheet=true;render();},
-  async oRel(id){const r=await oMPost('/api/online/release',{id:+id});U.sheet=null;OL.confirm=null;if(r)toast(r.dead?`Контракт расторгнут. Под потолком остаётся ${money(r.dead)}.`:`Контракт расторгнут бесплатно. Осталось бесплатных: ${r.freeRel}.`);await oMk();oTeam(oMy()).then(render);},
+  async oRel(id){const r=await oMPost(oUrl('/release'),{id:+id});U.sheet=null;OL.confirm=null;if(r)toast(r.dead?`Контракт расторгнут. Под потолком остаётся ${money(r.dead)}.`:`Контракт расторгнут бесплатно. Осталось бесплатных: ${r.freeRel}.`);await oMk();oTeam(oMy()).then(render);},
   oTT(id){OL.tr={to:+id,give:[],get:[],ev:null};render();oTeam(+id).then(render);const my=oMy();if(!OL.team[my])oTeam(my).then(render);},
   oTP(id){const [side,pid]=id.split('|'),a=OL.tr[side],n=+pid,i=a.indexOf(n);i<0?a.push(n):a.splice(i,1);U.keepSheet=true;oTradeEval();},
-  async oTSend(){const tr=OL.tr;const r=await oMPost('/api/online/trade',{to:tr.to,give:tr.give,get:tr.get});
+  async oTSend(){const tr=OL.tr;const r=await oMPost(oUrl('/trade'),{to:tr.to,give:tr.give,get:tr.get});
     if(r&&r.accepted){toast('Сделка закрыта!');sfx('sign');OL.tr={to:tr.to,give:[],get:[],ev:null};}
     else if(r&&r.pending){toast('Предложение отправлено.');OL.tr={to:tr.to,give:[],get:[],ev:null};}
     else if(r&&r.accepted===false)toast(`«${oT(tr.to).name}» отклонили предложение.`);
     await oMk();const my=oMy();await Promise.all([oTeam(my),oTeam(tr.to)]);render();},
-  async oTA(id){const [tid,action]=id.split('|');const r=await oMPost('/api/online/trade/answer',{id:tid,action});
+  async oTA(id){const [tid,action]=id.split('|');const r=await oMPost(oUrl('/trade/answer'),{id:tid,action});
     if(r)toast(action==='accept'?'Обмен состоялся!':action==='decline'?'Предложение отклонено.':'Предложение отозвано.');if(r&&action==='accept')sfx('sign');
     await oMk();const my=oMy();if(my!=null)oTeam(my).then(render);},
 });
@@ -4156,17 +4194,24 @@ function mCareer(){
   return `<button class="mmode" data-a="mGo" data-id="career">${badge(t,48)}<div><b>Карьера</b><small>${t.city} ${t.name} · ${seasonLbl()} · ${ph}${gp(t)?` · ${t.w}-${t.l}-${t.ot}`:''}</small><i>Продолжить →</i></div></button>`;
 }
 function mOnline(){
-  const v=OL.v,my=v?oMy():null;
+  const v=OL.v,my=v?oMy():null,T=OL.tours;
   let sub,cta,ic='<span class="mic">🌐</span>',live='';
   if(!oOk()){sub='Сезоны против живых менеджеров. Доступно в Telegram и в приложении.';cta='Подробнее →';}
-  else if(!v){sub=OL.err==='none'?'Сезоны против живых менеджеров. Следующий сезон скоро — дату объявим в канале.':OL.err==='net'?'Нет связи с сервером лиги.':'Загружаю…';cta='Открыть →';}
-  else{
+  else if(OL.sid&&v){
     if(v.slots.some(s=>s.games.some(g=>g.live)))live='<span class="olive">● LIVE</span>';
     if(my!=null){const t=oT(my),pl=oStand().findIndex(x=>x.id===my)+1,nx=oMine(my).find(x=>!x.g.res);ic=badge(t,48);
       sub=`${v.name} · ${t.name} · ${pl}-е место${nx?` · следующий матч ${oWhen(nx.s.t)}`:''}`;cta='Продолжить →';}
     else if(v.canJoin){const free=v.teams.filter(t=>!t.human).length;sub=`${v.name}: идёт набор, свободно клубов: ${free} из ${v.teams.length}. Вход до ${oWhen(v.deadlineT)}.`;cta='Выбрать клуб →';}
     else{sub=`${v.name} идёт без набора: можно смотреть матчи и таблицу.`;cta='Смотреть →';}
   }
+  else if(T){
+    if(T.mine&&T.mine.length){const m=T.mine[0];
+      if(T.mine.some(x=>x.live))live='<span class="olive">● LIVE</span>';
+      sub=`${m.name} · ${m.club} · ${m.place}-е место${m.next?` · следующий матч ${oWhen(m.next.t)}`:''}${T.mine.length>1?` · турниров: ${T.mine.length}`:''}`;cta='Продолжить →';}
+    else if(T.open&&T.open.length){const o=T.open[0];sub=`Открыт набор: ${o.name} — свободно клубов ${o.teams-o.humans} из ${o.teams}, вход до ${oWhen(o.deadlineT)}.`;cta='Выбрать клуб →';}
+    else{sub='Турниров сейчас нет: новые лиги объявим в канале игры.';cta='Открыть →';}
+  }
+  else{sub=OL.tourErr==='net'?'Нет связи с сервером лиги.':'Загружаю…';cta='Открыть →';}
   return `<button class="mmode" data-a="mGo" data-id="online">${ic}<div><b>Онлайн-лига ${live}</b><small>${sub}</small><i>${cta}</i></div></button>`;
 }
 function viewMain(){
