@@ -21,7 +21,7 @@ const initFor = (id, extra = {}) =>
 
 before(async () => {
   pool = makePool(url);
-  await pool.query('DROP TABLE IF EXISTS online_results, online_games, online_seasons, link_codes, devices, events, saves, users, _migrations CASCADE');
+  await pool.query('DROP TABLE IF EXISTS wallet_ops, wallets, admin_log, online_results, online_games, online_seasons, link_codes, devices, events, saves, users, _migrations CASCADE');
   await migrate(pool, { info() {} });
   app = buildApp({ pool, cfg, logger: false });
   await app.ready();
@@ -113,7 +113,7 @@ test('события и сводка', async () => {
   assert.ok(s.retention && 'cohort' in s.retention.d1);
   r = await app.inject({ method: 'GET', url: '/admin' });
   assert.equal(r.statusCode, 200);
-  assert.match(r.body, /Генменеджер · статистика/);
+  assert.match(r.body, /Генменеджер · админка/);
   r = await app.inject({ method: 'GET', url: '/privacy' });
   assert.match(r.body, /Политика конфиденциальности/);
 });
@@ -215,135 +215,143 @@ test('онлайн-сезон: создание, вход, расчёт, тра�
     r = await oapp.inject({ method: 'POST', url: '/api/admin/online/create', headers: { authorization: 'Bearer admin-key' }, payload: { fastSec: 60 } });
     assert.equal(r.statusCode, 200, r.body);
     assert.equal(r.json().slots, 28);
+    const sid = r.json().id;
+    // старый роут без sid — редирект на последний активный открытый сезон
     r = await oapp.inject({ method: 'GET', url: '/api/online' });
+    assert.equal(r.statusCode, 302);
+    assert.equal(r.headers.location, `/api/online/${sid}`);
+    r = await oapp.inject({ method: 'GET', url: `/api/online/${sid}` });
     const v = r.json();
     assert.equal(v.teams.length, 8);
+    assert.equal(v.id, sid);
     assert.ok(v.canJoin);
     // вход
     const a = (await oapp.inject({ method: 'POST', url: '/api/auth', payload: { initData: initFor(900) } })).json();
     const H = { authorization: 'Bearer ' + a.token };
-    r = await oapp.inject({ method: 'POST', url: '/api/online/join', headers: H, payload: { team: 3 } });
+    r = await oapp.inject({ method: 'POST', url: `/api/online/${sid}/join`, headers: H, payload: { team: 3 } });
     assert.equal(r.json().ok, true);
-    r = await oapp.inject({ method: 'POST', url: '/api/online/join', headers: H, payload: { team: 4 } });
+    r = await oapp.inject({ method: 'POST', url: `/api/online/${sid}/join`, headers: H, payload: { team: 4 } });
     assert.equal(r.statusCode, 409, 'второй клуб нельзя');
     const b = (await oapp.inject({ method: 'POST', url: '/api/auth', payload: { initData: initFor(901) } })).json();
-    r = await oapp.inject({ method: 'POST', url: '/api/online/join', headers: { authorization: 'Bearer ' + b.token }, payload: { team: 3 } });
+    r = await oapp.inject({ method: 'POST', url: `/api/online/${sid}/join`, headers: { authorization: 'Bearer ' + b.token }, payload: { team: 3 } });
     assert.equal(r.json().error, 'taken');
-    r = await oapp.inject({ method: 'GET', url: '/api/online', headers: H });
+    r = await oapp.inject({ method: 'GET', url: `/api/online/${sid}`, headers: H });
     assert.equal(r.json().my.team, 3);
     assert.equal(r.json().teams[3].human.name, 'Тест');
     // состав, план, звенья
-    r = await oapp.inject({ method: 'GET', url: '/api/online/team/3', headers: H });
+    r = await oapp.inject({ method: 'GET', url: `/api/online/${sid}/team/3`, headers: H });
     const tv = r.json();
     assert.ok(tv.mine && tv.players.length >= 20 && tv.players[0].pot != null && tv.lines.f.length === 4);
     assert.ok(tv.cap > 0 && tv.pay > 0 && tv.pay <= tv.cap && tv.n >= 20);
-    r = await oapp.inject({ method: 'GET', url: '/api/online/team/4', headers: H });
+    r = await oapp.inject({ method: 'GET', url: `/api/online/${sid}/team/4`, headers: H });
     assert.ok(!r.json().mine && r.json().players[0].pot === undefined, 'чужой потенциал скрыт');
-    r = await oapp.inject({ method: 'POST', url: '/api/online/plan', headers: H, payload: { key: 'def', plan: { sty: 'FC', risk: 4, pull: false } } });
+    r = await oapp.inject({ method: 'POST', url: `/api/online/${sid}/plan`, headers: H, payload: { key: 'def', plan: { sty: 'FC', risk: 4, pull: false } } });
     assert.equal(r.json().plans.def.sty, 'FC');
-    r = await oapp.inject({ method: 'POST', url: '/api/online/plan', headers: H, payload: { key: 'def', plan: { sty: 'XX' } } });
+    r = await oapp.inject({ method: 'POST', url: `/api/online/${sid}/plan`, headers: H, payload: { key: 'def', plan: { sty: 'XX' } } });
     assert.equal(r.statusCode, 409);
-    r = await oapp.inject({ method: 'POST', url: '/api/online/lines', headers: H, payload: { mode: 'combo' } });
+    r = await oapp.inject({ method: 'POST', url: `/api/online/${sid}/lines`, headers: H, payload: { mode: 'combo' } });
     assert.ok(r.json().ok);
     const Lc = r.json().lines; const sw = Lc.f[0][0]; Lc.f[0][0] = Lc.f[1][0]; Lc.f[1][0] = sw;
-    r = await oapp.inject({ method: 'POST', url: '/api/online/lines', headers: H, payload: { lines: Lc } });
+    r = await oapp.inject({ method: 'POST', url: `/api/online/${sid}/lines`, headers: H, payload: { lines: Lc } });
     assert.equal(r.json().lines.f[0][0], Lc.f[0][0]);
     const bad = JSON.parse(JSON.stringify(Lc)); bad.f[0][1] = bad.f[0][0];
-    r = await oapp.inject({ method: 'POST', url: '/api/online/lines', headers: H, payload: { lines: bad } });
+    r = await oapp.inject({ method: 'POST', url: `/api/online/${sid}/lines`, headers: H, payload: { lines: bad } });
     assert.equal(r.statusCode, 409, 'повтор игрока');
     // рынок
-    r = await oapp.inject({ method: 'GET', url: '/api/online/market', headers: H });
+    r = await oapp.inject({ method: 'GET', url: `/api/online/${sid}/market`, headers: H });
     let mk = r.json();
     assert.ok(mk.open.fa && mk.open.trade && mk.fa.length > 10 && mk.my.team === 3);
     const room = mk.my.cap - mk.my.pay;
     const fa = mk.fa.find((p) => p.ask <= room) || mk.fa[mk.fa.length - 1];
-    r = await oapp.inject({ method: 'POST', url: '/api/online/bid', headers: H, payload: { id: fa.id, sal: Math.min(room, Math.round(fa.ask * 1.3 / 10) * 10) } });
+    r = await oapp.inject({ method: 'POST', url: `/api/online/${sid}/bid`, headers: H, payload: { id: fa.id, sal: Math.min(room, Math.round(fa.ask * 1.3 / 10) * 10) } });
     assert.ok(r.json().ok, r.body);
     // поиск молодых в академию: раз в 2 игровых дня, 5 кандидатов
-    r = await oapp.inject({ method: 'POST', url: '/api/online/search', headers: H });
+    r = await oapp.inject({ method: 'POST', url: `/api/online/${sid}/search`, headers: H });
     assert.ok(r.json().ok, r.body);
-    r = await oapp.inject({ method: 'POST', url: '/api/online/search', headers: H });
+    r = await oapp.inject({ method: 'POST', url: `/api/online/${sid}/search`, headers: H });
     assert.equal(r.json().error, 'wait');
-    const ac = (await oapp.inject({ method: 'GET', url: '/api/online/academy', headers: H })).json();
+    const ac = (await oapp.inject({ method: 'GET', url: `/api/online/${sid}/academy`, headers: H })).json();
     assert.equal(ac.cands.length, 5, 'скауты привезли пятерых кандидатов');
-    r = await oapp.inject({ method: 'GET', url: '/api/online/market' });
+    r = await oapp.inject({ method: 'GET', url: `/api/online/${sid}/market` });
     assert.equal(r.json().my, null, 'без входа — без личного списка');
     // обмен с компьютером: даром не отдаёт, за сильного отдаёт слабого
-    const t3 = (await oapp.inject({ method: 'GET', url: '/api/online/team/3', headers: H })).json();
-    const t5 = (await oapp.inject({ method: 'GET', url: '/api/online/team/5', headers: H })).json();
+    const t3 = (await oapp.inject({ method: 'GET', url: `/api/online/${sid}/team/3`, headers: H })).json();
+    const t5 = (await oapp.inject({ method: 'GET', url: `/api/online/${sid}/team/5`, headers: H })).json();
     const best5 = t5.players.filter((p) => p.pos !== 'G').sort((a, b) => b.ovr - a.ovr)[0];
-    r = await oapp.inject({ method: 'POST', url: '/api/online/trade/eval', headers: H, payload: { to: 5, give: [], get: [best5.id] } });
+    r = await oapp.inject({ method: 'POST', url: `/api/online/${sid}/trade/eval`, headers: H, payload: { to: 5, give: [], get: [best5.id] } });
     assert.equal(r.json().deal, false);
     const sumSal = (ps) => ps.filter((p) => p.yrs > 0).reduce((x, p) => x + p.sal, 0);
     const room5 = mk.cap - sumSal(t5.players), room3 = mk.cap - sumSal(t3.players);
     let best3 = null, weak5 = null;
     for (const g of t3.players.filter((p) => p.pos !== 'G').sort((a, b) => b.ovr - a.ovr)) {
       const c = t5.players.filter((p) => p.pos !== 'G' && p.ovr <= g.ovr - 8 && g.sal - p.sal <= room5 && p.sal - g.sal <= room3).sort((a, b) => b.sal - a.sal)[0];
-      if (c) { best3 = g; weak5 = c; break; }
+      if (!c) continue;
+      const e = await online.tradeEval(a.user.id, { to: 5, give: [g.id], get: [c.id] }, sid);
+      if (e.deal) { best3 = g; weak5 = c; break; } // подбираем пару тем же расчётом, что и сервер
     }
     assert.ok(best3, 'нашлась пара для обмена');
-    r = await oapp.inject({ method: 'POST', url: '/api/online/trade', headers: H, payload: { to: 5, give: [best3.id], get: [weak5.id] } });
+    r = await oapp.inject({ method: 'POST', url: `/api/online/${sid}/trade`, headers: H, payload: { to: 5, give: [best3.id], get: [weak5.id] } });
     assert.equal(r.json().accepted, true, r.body);
     // обмен с человеком: предложение → принятие
     const H2 = { authorization: 'Bearer ' + b.token };
-    r = await oapp.inject({ method: 'POST', url: '/api/online/join', headers: H2, payload: { team: 6 } });
+    r = await oapp.inject({ method: 'POST', url: `/api/online/${sid}/join`, headers: H2, payload: { team: 6 } });
     assert.ok(r.json().ok);
-    const t6 = (await oapp.inject({ method: 'GET', url: '/api/online/team/6', headers: H2 })).json();
+    const t6 = (await oapp.inject({ method: 'GET', url: `/api/online/${sid}/team/6`, headers: H2 })).json();
     const cheap = (ps) => ps.filter((p) => p.pos !== 'G' && p.yrs > 0).sort((x, y) => x.sal - y.sal)[0];
-    const a6 = cheap(t6.players), a3 = cheap((await oapp.inject({ method: 'GET', url: '/api/online/team/3', headers: H })).json().players);
-    r = await oapp.inject({ method: 'POST', url: '/api/online/trade', headers: H, payload: { to: 6, give: [a3.id], get: [a6.id] } });
+    const a6 = cheap(t6.players), a3 = cheap((await oapp.inject({ method: 'GET', url: `/api/online/${sid}/team/3`, headers: H })).json().players);
+    r = await oapp.inject({ method: 'POST', url: `/api/online/${sid}/trade`, headers: H, payload: { to: 6, give: [a3.id], get: [a6.id] } });
     assert.ok(r.json().pending, r.body);
     const tid = r.json().trade.id;
-    r = await oapp.inject({ method: 'POST', url: '/api/online/trade/answer', headers: H, payload: { id: tid, action: 'accept' } });
+    r = await oapp.inject({ method: 'POST', url: `/api/online/${sid}/trade/answer`, headers: H, payload: { id: tid, action: 'accept' } });
     assert.equal(r.statusCode, 409, 'принимает только получатель');
-    r = await oapp.inject({ method: 'POST', url: '/api/online/trade/answer', headers: H2, payload: { id: tid, action: 'accept' } });
+    r = await oapp.inject({ method: 'POST', url: `/api/online/${sid}/trade/answer`, headers: H2, payload: { id: tid, action: 'accept' } });
     assert.ok(r.json().ok, r.body);
-    const t6b = (await oapp.inject({ method: 'GET', url: '/api/online/team/6', headers: H2 })).json();
+    const t6b = (await oapp.inject({ method: 'GET', url: `/api/online/${sid}/team/6`, headers: H2 })).json();
     assert.ok(t6b.players.some((p) => p.id === a3.id));
     // расторжение
     const cut = t6b.players.filter((p) => p.pos !== 'G').sort((a, b) => b.ovr - a.ovr)[0]; // сильнейший — точно в списке агентов
-    r = await oapp.inject({ method: 'POST', url: '/api/online/release', headers: H2, payload: { id: cut.id } });
+    r = await oapp.inject({ method: 'POST', url: `/api/online/${sid}/release`, headers: H2, payload: { id: cut.id } });
     assert.ok(r.json().ok && r.json().free && r.json().dead === 0 && r.json().freeRel === 2, r.body);
-    mk = (await oapp.inject({ method: 'GET', url: '/api/online/market', headers: H2 })).json();
+    mk = (await oapp.inject({ method: 'GET', url: `/api/online/${sid}/market`, headers: H2 })).json();
     assert.equal(mk.my.dead, 0);
     assert.equal(mk.my.freeRel, 2);
     const cutRow = mk.fa.find((p) => p.id === cut.id);
     assert.equal(cutRow && cutRow.rel, 'mine', 'свой расторгнутый помечен');
     // вернуть своего нельзя, другому человеку — только через 24 часа
-    r = await oapp.inject({ method: 'POST', url: '/api/online/bid', headers: H2, payload: { id: cut.id, sal: mk.maxSal } });
+    r = await oapp.inject({ method: 'POST', url: `/api/online/${sid}/bid`, headers: H2, payload: { id: cut.id, sal: mk.maxSal } });
     assert.equal(r.json().error, 'released_by_you', r.body);
-    r = await oapp.inject({ method: 'POST', url: '/api/online/bid', headers: H, payload: { id: cut.id, sal: mk.maxSal } });
+    r = await oapp.inject({ method: 'POST', url: `/api/online/${sid}/bid`, headers: H, payload: { id: cut.id, sal: mk.maxSal } });
     assert.equal(r.json().error, 'released_lock', r.body);
-    assert.equal(online.market(a.user.id, Date.now() + 25 * 3600e3).fa.find((p) => p.id === cut.id).rel, null, 'через 24 часа доступен');
+    assert.equal((await online.market(a.user.id, sid, Date.now() + 25 * 3600e3)).fa.find((p) => p.id === cut.id).rel, null, 'через 24 часа доступен');
     // ещё два бесплатных, четвёртое — половина зарплаты под потолком
     for (let k = 0; k < 3; k++) {
-      const t6c = (await oapp.inject({ method: 'GET', url: '/api/online/team/6', headers: H2 })).json();
+      const t6c = (await oapp.inject({ method: 'GET', url: `/api/online/${sid}/team/6`, headers: H2 })).json();
       const c2 = t6c.players.filter((p) => p.pos !== 'G' && p.yrs > 0).sort((x, y) => x.ovr - y.ovr)[0];
-      r = await oapp.inject({ method: 'POST', url: '/api/online/release', headers: H2, payload: { id: c2.id } });
+      r = await oapp.inject({ method: 'POST', url: `/api/online/${sid}/release`, headers: H2, payload: { id: c2.id } });
       if (r.statusCode === 409 && r.json().error === 'roster_min') break;
       if (k < 2) assert.ok(r.json().free && r.json().dead === 0, r.body);
       else assert.ok(!r.json().free && r.json().dead > 0 && r.json().freeRel === 0, r.body);
     }
-    mk = (await oapp.inject({ method: 'GET', url: '/api/online/market', headers: H2 })).json();
+    mk = (await oapp.inject({ method: 'GET', url: `/api/online/${sid}/market`, headers: H2 })).json();
     assert.equal(mk.my.dead, r.statusCode === 200 ? r.json().dead : 0);
     // финансы: касса, цены, арена
-    r = await oapp.inject({ method: 'GET', url: '/api/online/fin', headers: H });
+    r = await oapp.inject({ method: 'GET', url: `/api/online/${sid}/fin`, headers: H });
     let fv = r.json();
     assert.ok(fv.cash === 8000 && fv.arena === 1 && fv.cap === 15000 && fv.cost > 0 && fv.next, r.body);
-    r = await oapp.inject({ method: 'POST', url: '/api/online/prices', headers: H, payload: { tix: { auto: false, price: 120 } } });
+    r = await oapp.inject({ method: 'POST', url: `/api/online/${sid}/prices`, headers: H, payload: { tix: { auto: false, price: 120 } } });
     assert.ok(r.json().ok && r.json().tix.price === 120 && !r.json().tix.auto, r.body);
-    r = await oapp.inject({ method: 'POST', url: '/api/online/prices', headers: H, payload: { tix: { auto: false, price: 999 } } });
+    r = await oapp.inject({ method: 'POST', url: `/api/online/${sid}/prices`, headers: H, payload: { tix: { auto: false, price: 999 } } });
     assert.equal(r.json().error, 'bad_price');
-    r = await oapp.inject({ method: 'POST', url: '/api/online/prices', headers: H, payload: { tix: { auto: true } } });
+    r = await oapp.inject({ method: 'POST', url: `/api/online/${sid}/prices`, headers: H, payload: { tix: { auto: true } } });
     assert.ok(r.json().tix.auto);
-    r = await oapp.inject({ method: 'POST', url: '/api/online/arena', headers: H });
+    r = await oapp.inject({ method: 'POST', url: `/api/online/${sid}/arena`, headers: H });
     assert.ok(r.json().ok && r.json().arena === 2 && r.json().cap === 16500, r.body);
-    fv = (await oapp.inject({ method: "GET", url: "/api/online/fin", headers: H })).json();
+    fv = (await oapp.inject({ method: "GET", url: `/api/online/${sid}/fin`, headers: H })).json();
     assert.equal(fv.cash, 8000 - fv.spent);
-    r = await oapp.inject({ method: 'GET', url: '/api/online/fin' });
+    r = await oapp.inject({ method: 'GET', url: `/api/online/${sid}/fin` });
     assert.equal(r.statusCode, 401, 'финансы — только своего клуба');
     // дерби: у каждого есть соперник, пары взаимные, матчи отмечены
-    const vd = (await oapp.inject({ method: 'GET', url: '/api/online' })).json();
+    const vd = (await oapp.inject({ method: 'GET', url: `/api/online/${sid}` })).json();
     for (const t of vd.teams) assert.equal(vd.teams[t.rival].rival, t.id, 'пары дерби взаимные');
     const dg = vd.slots.flatMap((sl) => sl.games).filter((g) => g.derby);
     assert.equal(dg.length, 4 * 4, 'по 4 дерби у каждой из 4 пар');
@@ -351,25 +359,25 @@ test('онлайн-сезон: создание, вход, расчёт, тра�
     const first = v.slots[0];
     // отметка «на арене»: за минуту до начала
     const myG = first.games.find((g) => g.h === 3 || g.a === 3) || v.slots.flatMap((x) => x.games).find((g) => g.h === 3 || g.a === 3);
-    const pr = await online.game(myG.id, v.slots.find((x) => x.games.includes(myG)).t - 30e3, a.user.id);
+    const pr = await online.game(myG.id, sid, v.slots.find((x) => x.games.includes(myG)).t - 30e3, a.user.id);
     assert.ok(pr.mine && pr.present && pr.started === false, JSON.stringify(pr));
     assert.equal(await online.tick(first.t + 30e3), 0, 'первая минута — выход команд');
     const n = await online.tick(first.t + 61e3);
     assert.equal(n, 4, 'четыре матча в слоте');
     const gid = first.games[0].id;
     // идёт трансляция: результата нет, тиков меньше полного
-    const live = await online.game(gid, first.t + 120e3);
+    const live = await online.game(gid, sid, first.t + 120e3);
     assert.ok(live.started && !live.done && live.res === null);
     assert.ok(live.ticks.length > 0 && live.ticks.length < live.total);
-    const vl = online.view(null, first.t + 120e3);
+    const vl = await online.view(null, sid, first.t + 120e3);
     assert.equal(vl.teams.reduce((s, t) => s + t.gp, 0), 0, 'таблица не раскрывает идущие матчи');
     // после окончания
-    const fin = await online.game(gid, first.t + 11 * 60e3);
+    const fin = await online.game(gid, sid, first.t + 11 * 60e3);
     assert.ok(fin.done && fin.res && fin.box && fin.rost && fin.gk.length === 2);
     assert.equal(fin.ticks.length, fin.total);
     // весь сезон до чемпиона
     await online.tick(first.t + 365 * 864e5);
-    const end = online.view(null, first.t + 366 * 864e5);
+    const end = await online.view(null, sid, first.t + 366 * 864e5);
     assert.ok(end.champ != null, 'есть чемпион');
     assert.equal(end.teams.reduce((s, t) => s + t.gp, 0), 8 * 28);
     // итоги: награды, очки, без id менеджеров в публичном виде
@@ -379,22 +387,79 @@ test('онлайн-сезон: создание, вход, расчёт, тра�
     assert.equal(!!R.awards.genius, R.rows.some((x) => x.active));
     assert.equal(R.rows.length, 2);
     assert.ok(R.rows.every((x) => x.uid === undefined) && (!R.awards.genius || R.awards.genius.uid === undefined), 'id менеджеров не раскрываются');
-    for (const x of R.rows) assert.equal(x.points, x.pts.place + x.pts.po + x.pts.derby);
+    for (const x of R.rows) assert.equal(x.points, x.pts.place + x.pts.po + x.pts.derby + x.pts.spon);
     // в каждом клубе деньги за все матчи: ТВ за 28 матчей регулярки и больше
-    const f3 = (await oapp.inject({ method: 'GET', url: '/api/online/fin', headers: H })).json();
+    const f3 = (await oapp.inject({ method: 'GET', url: `/api/online/${sid}/fin`, headers: H })).json();
     assert.ok(f3.inc.tv >= 28 * 400 && f3.inc.tix > 0 && f3.inc.jer > 0 && f3.closed, JSON.stringify(f3.inc));
     const dl = f3.log.filter((l) => l.derby && l.home);
     assert.ok(dl.every((l) => l.att === l.cap), 'на дерби полный зал');
     // рейтинг: тестовый сезон в него не идёт, но в истории менеджера есть
-    r = await oapp.inject({ method: 'GET', url: '/api/online/rating', headers: H });
+    r = await oapp.inject({ method: 'GET', url: `/api/online/${sid}/rating`, headers: H });
     const rt = r.json();
     assert.equal(rt.top.length, 0, 'тестовый сезон без рейтинга');
     assert.equal(rt.history.length, 1);
     assert.ok(rt.history[0].test);
-    // перезапуск сервера поднимает сезон из базы
+    // перезапуск сервера поднимает завершённый сезон лениво (для просмотра итогов)
     const again = makeOnline(pool, html, { info() {}, error() {} });
     await again.init();
-    assert.equal(again.view(null, first.t + 366 * 864e5).champ, end.champ);
+    assert.equal(again.active, false, 'завершённых в реестре активных нет');
+    assert.equal((await again.view(null, sid, first.t + 366 * 864e5)).champ, end.champ);
+  } finally { await oapp.close(); }
+});
+
+test('мультисезон: список турниров, вход через /api/seasons/:sid/join, лимит и легаси-редиректы', async () => {
+  const html = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../index.html');
+  const online = makeOnline(pool, html, { info() {}, error() {} }, { maxSeasonsPerUser: 2 });
+  await online.init();
+  const oapp = buildApp({ pool, cfg, logger: false, online });
+  await oapp.ready();
+  try {
+    // в базе уже есть завершённый тестовый сезон прошлого теста: список без авторизации — только открытые
+    let r = await oapp.inject({ method: 'GET', url: '/api/seasons' });
+    assert.deepEqual(r.json(), { open: [] }, 'без авторизации — только открытые лиги');
+    const mk = (name) => oapp.inject({ method: 'POST', url: '/api/admin/online/create', headers: { authorization: 'Bearer admin-key' }, payload: { fastSec: 3600, name } }).then((x) => x.json().id);
+    const s1 = await mk('Лига А'), s2 = await mk('Лига Б'), s3 = await mk('Лига В');
+    r = await oapp.inject({ method: 'GET', url: '/api/seasons' });
+    assert.equal(r.json().open.length, 3, 'три открытые лиги');
+    // игроки входят через новый роут
+    const auth = async (id) => ({ authorization: 'Bearer ' + (await oapp.inject({ method: 'POST', url: '/api/auth', payload: { initData: initFor(id) } })).json().token });
+    const p1 = await auth(910), p2 = await auth(911), p3 = await auth(912);
+    assert.equal((await oapp.inject({ method: 'POST', url: `/api/seasons/${s1}/join`, headers: p1, payload: { team: 0 } })).json().ok, true);
+    assert.equal((await oapp.inject({ method: 'POST', url: `/api/seasons/${s2}/join`, headers: p1, payload: { team: 1 } })).json().ok, true, 'второй сезон — можно');
+    r = await oapp.inject({ method: 'POST', url: `/api/seasons/${s3}/join`, headers: p1, payload: { team: 2 } });
+    assert.equal(r.statusCode, 409);
+    assert.equal(r.json().error, 'seasons_max', 'лимит двух активных сезонов');
+    await oapp.inject({ method: 'POST', url: `/api/seasons/${s3}/join`, headers: p2, payload: { team: 2 } });
+    // список с авторизацией: мои турниры + открытые
+    r = await oapp.inject({ method: 'GET', url: '/api/seasons', headers: p1 });
+    const list = r.json();
+    assert.equal(list.mine.length, 2);
+    assert.deepEqual(list.mine.map((x) => x.sid).sort((a, b) => a - b), [s1, s2]);
+    const mine1 = list.mine.find((x) => x.sid === s1);
+    assert.equal(mine1.club.length > 0, true);
+    assert.equal(mine1.place >= 1 && mine1.place <= 8, true);
+    assert.equal(mine1.live, false);
+    assert.equal(!!mine1.next, true, 'есть следующий матч');
+    assert.equal(list.open.length, 3, 'все три лиги ещё набор: места свободны');
+    assert.equal(list.open[0].deadlineT > 0, true);
+    assert.equal(list.done.length, 1, 'завершённый сезон прошлого теста — с чемпионом');
+    assert.equal(list.done[0].champ != null, true);
+    // легаси: редиректы на последний открытый сезон
+    r = await oapp.inject({ method: 'GET', url: '/api/online' });
+    assert.equal(r.statusCode, 302);
+    assert.equal(r.headers.location, `/api/online/${s3}`);
+    r = await oapp.inject({ method: 'GET', url: r.headers.location, headers: p1 });
+    assert.equal(r.json().id, s3);
+    r = await oapp.inject({ method: 'POST', url: '/api/online/join', headers: p3, payload: { team: 5 } });
+    assert.equal(r.statusCode, 308, 'POST-редирект сохраняет метод');
+    assert.equal(r.headers.location, `/api/online/${s3}/join`);
+    r = await oapp.inject({ method: 'POST', url: r.headers.location, headers: p3, payload: { team: 5 } });
+    assert.equal(r.json().ok, true, 'вход по редиректу работает');
+    // рейтинг глобальный: у игрока завершённого сезона история на месте
+    const p0 = await auth(900);
+    r = await oapp.inject({ method: 'GET', url: `/api/online/${s1}/rating`, headers: p0 });
+    assert.ok(Array.isArray(r.json().top));
+    assert.equal(r.json().history.length, 1, 'история менеджера из прошлого сезона на месте');
   } finally { await oapp.close(); }
 });
 
@@ -491,4 +556,122 @@ test('онлайн: академия, прокачки, торги вслепу�
   assert.ok(n >= 2, `наследники перенесены: ${n}`);
   const inh = S2.players.filter((p) => p.team === -5);
   assert.ok(inh.every((p) => p.age >= 18), 'возраст +1 год');
+});
+
+test('админка: сессия по ключу, бан/разбан, кошелёк, удаление аккаунта, сезоны, журнал', async () => {
+  const html = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../index.html');
+  const online = makeOnline(pool, html, { info() {}, error() {} });
+  await online.init();
+  const oapp = buildApp({ pool, cfg, logger: false, online });
+  await oapp.ready();
+  try {
+    // вход по ключу: сессия работает, чужой токен — нет
+    let r = await oapp.inject({ method: 'POST', url: '/api/admin/login', payload: { key: 'wrong' } });
+    assert.equal(r.statusCode, 401);
+    r = await oapp.inject({ method: 'POST', url: '/api/admin/login', payload: { key: 'admin-key' } });
+    assert.equal(r.statusCode, 200);
+    const AT = { authorization: 'Bearer ' + r.json().token };
+    r = await oapp.inject({ method: 'GET', url: '/api/admin/users', headers: { authorization: 'Bearer forged.token.here' } });
+    assert.equal(r.statusCode, 401);
+    r = await oapp.inject({ method: 'GET', url: '/api/admin/users', headers: AT });
+    assert.equal(r.statusCode, 200);
+    assert.ok(r.json().total >= 1 && r.json().users.length >= 1);
+    // список сезонов (прошлые тесты оставили завершённые)
+    r = await oapp.inject({ method: 'GET', url: '/api/admin/seasons', headers: AT });
+    assert.ok(r.json().seasons.length >= 1);
+    assert.ok(r.json().seasons.every((s) => s.sid > 0 && s.name));
+    // сезон из формы админки
+    r = await oapp.inject({ method: 'POST', url: '/api/admin/seasons', headers: AT, payload: { template: 'test8', name: 'Админ-лига', fastSec: 3600 } });
+    assert.equal(r.statusCode, 200, r.body);
+    const sid = r.json().id;
+    // игрок входит; админ снимает его с клуба и возвращает
+    const a = (await oapp.inject({ method: 'POST', url: '/api/auth', payload: { initData: initFor(920) } })).json();
+    const H = { authorization: 'Bearer ' + a.token };
+    r = await oapp.inject({ method: 'POST', url: `/api/online/${sid}/join`, headers: H, payload: { team: 2 } });
+    assert.ok(r.json().ok);
+    r = await oapp.inject({ method: 'POST', url: `/api/admin/seasons/${sid}/human`, headers: AT, payload: { team: 2 } });
+    assert.ok(r.json().ok, 'клуб передан боту');
+    let v = (await oapp.inject({ method: 'GET', url: `/api/online/${sid}` })).json();
+    assert.equal(v.teams[2].human, null);
+    r = await oapp.inject({ method: 'POST', url: `/api/admin/seasons/${sid}/human`, headers: AT, payload: { team: 2, uid: a.user.id } });
+    assert.ok(r.json().ok, 'клуб возвращён человеку');
+    v = (await oapp.inject({ method: 'GET', url: `/api/online/${sid}` })).json();
+    assert.equal(v.teams[2].human.name, 'Тест');
+    // поиск участников и карточка
+    r = await oapp.inject({ method: 'GET', url: '/api/admin/users?q=' + encodeURIComponent('Тест'), headers: AT });
+    assert.ok(r.json().users.some((u) => u.id === a.user.id));
+    r = await oapp.inject({ method: 'GET', url: `/api/admin/users/${a.user.id}`, headers: AT });
+    const card = r.json();
+    assert.equal(card.clubs.length, 1);
+    assert.equal(card.clubs[0].sid, sid);
+    assert.equal(card.wallet, 0);
+    // бан: вход и игровые роуты отдают 403 banned с причиной
+    r = await oapp.inject({ method: 'POST', url: `/api/admin/users/${a.user.id}/ban`, headers: AT, payload: { banned: true, reason: 'Чит' } });
+    assert.equal(r.json().banned, true);
+    r = await oapp.inject({ method: 'POST', url: '/api/auth', payload: { initData: initFor(920) } });
+    assert.equal(r.statusCode, 403);
+    assert.equal(r.json().error, 'banned');
+    assert.equal(r.json().reason, 'Чит');
+    r = await oapp.inject({ method: 'GET', url: `/api/online/${sid}/fin`, headers: H });
+    assert.equal(r.statusCode, 403, 'игровые роуты закрыты');
+    assert.equal(r.json().error, 'banned');
+    r = await oapp.inject({ method: 'POST', url: `/api/admin/users/${a.user.id}/ban`, headers: AT, payload: { banned: false } });
+    assert.equal(r.json().banned, false);
+    r = await oapp.inject({ method: 'GET', url: `/api/online/${sid}/fin`, headers: H });
+    assert.equal(r.statusCode, 200, 'разбан вернул доступ');
+    // кошелёк: выдача, списание, отрицательный баланс запрещён
+    r = await oapp.inject({ method: 'POST', url: `/api/admin/users/${a.user.id}/wallet`, headers: AT, payload: { delta: 500, comment: 'Бонус' } });
+    assert.equal(r.json().balance, 500);
+    r = await oapp.inject({ method: 'POST', url: `/api/admin/users/${a.user.id}/wallet`, headers: AT, payload: { delta: -200, comment: 'Штраф' } });
+    assert.equal(r.json().balance, 300);
+    r = await oapp.inject({ method: 'POST', url: `/api/admin/users/${a.user.id}/wallet`, headers: AT, payload: { delta: -1000 } });
+    assert.equal(r.statusCode, 409);
+    assert.equal(r.json().error, 'negative');
+    r = await oapp.inject({ method: 'GET', url: `/api/admin/users/${a.user.id}`, headers: AT });
+    assert.equal(r.json().wallet, 300);
+    assert.equal(r.json().walletOps.length, 2);
+    // переименование
+    r = await oapp.inject({ method: 'POST', url: `/api/admin/users/${a.user.id}/rename`, headers: AT, payload: { name: 'Новое Имя' } });
+    assert.ok(r.json().ok);
+    // досрочное завершение: чемпион и итоги на месте
+    r = await oapp.inject({ method: 'POST', url: `/api/admin/seasons/${sid}/finish`, headers: AT });
+    assert.ok(r.json().ok);
+    v = (await oapp.inject({ method: 'GET', url: `/api/online/${sid}` })).json();
+    assert.notEqual(v.champ, null, 'чемпион есть');
+    assert.notEqual(v.results, null, 'итоги есть');
+    // завершённый сезон не удалить, архивировать — можно
+    r = await oapp.inject({ method: 'DELETE', url: `/api/admin/seasons/${sid}`, headers: AT });
+    assert.equal(r.statusCode, 409);
+    assert.equal(r.json().error, 'not_empty');
+    r = await oapp.inject({ method: 'POST', url: `/api/admin/seasons/${sid}/archive`, headers: AT });
+    assert.ok(r.json().ok);
+    // удаление аккаунта: клуб активного сезона уходит боту, аккаунт обезличен, итоги сохранены
+    r = await oapp.inject({ method: 'POST', url: '/api/admin/seasons', headers: AT, payload: { template: 'test8', name: 'Админ-лига 2', fastSec: 3600 } });
+    const sid2 = r.json().id;
+    r = await oapp.inject({ method: 'POST', url: `/api/online/${sid2}/join`, headers: H, payload: { team: 3 } });
+    assert.ok(r.json().ok);
+    r = await oapp.inject({ method: 'POST', url: `/api/admin/users/${a.user.id}/delete`, headers: AT });
+    assert.ok(r.json().ok);
+    assert.equal(r.json().clubs, 1, 'один клуб ушёл боту');
+    const v2 = (await oapp.inject({ method: 'GET', url: `/api/online/${sid2}` })).json();
+    assert.equal(v2.teams[3].human, null);
+    r = await oapp.inject({ method: 'GET', url: `/api/admin/users/${a.user.id}`, headers: AT });
+    assert.equal(r.json().user.first_name, 'Удалённый аккаунт');
+    assert.equal(r.json().user.tg_id, null);
+    assert.equal(r.json().user.banned, false);
+    assert.ok(r.json().results.length >= 1, 'строки итогов сохранены');
+    assert.ok(r.json().results.every((x) => x.name === 'Удалённый аккаунт'), 'и обезличены');
+    // audit log: на каждое действие — строка
+    r = await oapp.inject({ method: 'GET', url: '/api/admin/log', headers: AT });
+    const acts = new Set(r.json().log.map((x) => x.action));
+    for (const need of ['login', 'ban', 'unban', 'wallet', 'rename', 'season_create', 'season_finish', 'season_kick', 'season_give', 'season_archive', 'delete_user'])
+      assert.ok(acts.has(need), 'в журнале есть ' + need);
+    // пустой не начавшийся сезон удаляется
+    r = await oapp.inject({ method: 'POST', url: '/api/admin/seasons', headers: AT, payload: { template: 'test8', name: 'На удаление', fastSec: 3600 } });
+    const sid3 = r.json().id;
+    r = await oapp.inject({ method: 'DELETE', url: `/api/admin/seasons/${sid3}`, headers: AT });
+    assert.ok(r.json().ok);
+    r = await oapp.inject({ method: 'GET', url: `/api/online/${sid3}` });
+    assert.equal(r.statusCode, 404, 'удалённый сезон не отдаётся');
+  } finally { await oapp.close(); }
 });

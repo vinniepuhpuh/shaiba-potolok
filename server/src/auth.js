@@ -59,3 +59,23 @@ export function readToken(token, secret, now = Date.now()) {
   if (!p || !Number.isSafeInteger(p.uid) || !(p.exp > now / 1000)) return null;
   return p;
 }
+
+/** Токен админ-сессии: тело {adm:1, exp}. Ключ внутри не храним — только подпись. TTL 12 ч. */
+export function issueAdminToken(secret, ttlSec = 12 * 3600, now = Date.now()) {
+  const body = b64u(JSON.stringify({ adm: 1, exp: Math.floor(now / 1000) + ttlSec }));
+  const sig = b64u(crypto.createHmac('sha256', secret).update(body).digest());
+  return `${body}.${sig}`;
+}
+
+export function readAdminToken(token, secret, now = Date.now()) {
+  if (!token || typeof token !== 'string') return null;
+  const [body, sig] = token.split('.');
+  if (!body || !sig) return null;
+  const exp = b64u(crypto.createHmac('sha256', secret).update(body).digest());
+  const a = Buffer.from(sig), b = Buffer.from(exp);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  let p;
+  try { p = JSON.parse(Buffer.from(body, 'base64url').toString()); } catch { return null; }
+  if (!p || p.adm !== 1 || !(p.exp > now / 1000)) return null;
+  return p;
+}
