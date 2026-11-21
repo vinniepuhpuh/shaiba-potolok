@@ -1970,6 +1970,7 @@ function load(){try{const s=localStorage.getItem(KEY);if(s){const o=JSON.parse(s
 
 /* ---------- changelog ---------- */
 const CHANGES=[
+  {v:'2026-11-21b',d:'21 ноября',t:'Игровой никнейм',items:['При первом входе игра предложит выбрать никнейм — именно его увидят соперники в онлайн-лиге вместо имени из Telegram.','Никнейм можно поменять в любой момент: карточка аккаунта на главном экране → «Сменить имя».']},
   {v:'2026-11-21a',d:'21 ноября',t:'Мои турниры',items:['Онлайн-лига стала мультисезонной: параллельно может идти несколько турниров, и можно играть сразу в нескольких — до трёх одновременно.','Экран «Мои турниры» — новая точка входа в онлайн: ваши сезоны с местом и следующим матчем (у идущих матчей плашка LIVE), открытые лиги с кнопкой «Вступить» и завершённые с чемпионами.','Кнопка со стрелкой в шапке турнира возвращает к списку лиг.','Напоминания бота о матчах подписаны именем турнира, а кнопка «К матчу» открывает нужную лигу сразу.']},
   {v:'2026-11-20c',d:'20 ноября',t:'Тренеры, спонсоры и большая лига',items:['Главный тренер: у каждого профиль стилей — один любимый (стиль даёт ещё +20%), два хороших (+10%), остальные без бонуса. Стартовый тренер подобран под состав клуба.','Рынок тренеров: главного можно сменить на свободного специалиста, но не больше двух замен за сезон.','Тренер по физподготовке: переключатель «основа / академия». Работа с основой со временем даёт до +3 к силе состава и ускоряет рост игроков к потенциалу; переключитесь на академию — шкала основы падает, зато воспитанники растут быстрее. Шкала обновляется каждый игровой день.','Клуб, набравший хорошую форму, отмечен значком 🔥 рядом с названием — точное значение шкалы соперникам не видно.','Титульный спонсор: три контракта на выбор. Больше денег — жёстче требования к месту в таблице и плей-офф; скромнее деньги — больше очков рейтинга. Выплаты каждую неделю сезона, бонус — по итогам.','Большая лига: 32 клуба в двух конференциях, 82 матча регулярного чемпионата (26 с соперниками по дивизиону, 24 по конференции, 32 межконференционных), плей-офф по 8 клубов от конференции, финал — между чемпионами конференций.']},
   {v:'2026-11-20b',d:'20 ноября',t:'Академия и торги вслепую',items:['Молодёжная академия: скауты раз в 2 игровых дня привозят 5 кандидатов 17–19 лет. Взять можно любое число — в академию бесплатно или сразу в основу по контракту новичка.','Воспитанники не занимают место в составе и не сидят под потолком, растут ускоренно. Не переведёте в основу вовремя — соперники начнут торги.','Потенциал кандидатов виден расплывчато; скаутская служба (5 уровней) сужает разброс и повышает шанс найти самородка, академия (5 уровней) добавляет места и ускоряет рост.','Переманивание — торги вслепую: ставки соперников не видны, игрок сразу идёт в основной состав. Владелец видит лучшую ставку и может её повторить, чтобы оставить игрока.','Свободные агенты — тоже торги вслепую: мгновенного подписания больше нет, игрок уходит лучшему предложению через игровой день. Свою ставку можно только повышать.','Два лучших воспитанника переходят в академию вашего клуба в следующем сезоне.','Баланс стилей: зеркальный матчап (одинаковые стили) больше не даёт преимущества никому, а в серии плей-офф повтор одного стиля подряд теряет силу: 100 → 85 → 70 → 55%.']},
@@ -2784,6 +2785,24 @@ function sheetCode(){
   ${U.codeMsg?`<p class="small ${U.codeMsg.ok?'ok':'bad'}">${U.codeMsg.t}</p>`:''}
   <div class="btn-row"><button class="btn" data-a="close">Закрыть</button><button class="btn pri" data-a="codeGo">Применить</button></div></div>`;
 }
+function sheetNick(){
+  const first=!!CL.needName;
+  return `<div class="stack"><h3>${first?'Как вас называть?':'Сменить имя'}</h3><p class="sub">Это имя увидят соперники в онлайн-лиге. Можно поменять в любой момент.</p>
+  <input id="nickIn" class="inp" maxlength="24" autocomplete="off" placeholder="Никнейм" value="${oEsc(CL.nick||'')}" style="font:inherit;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--sunk);color:var(--ink)">
+  ${U.nickMsg?`<p class="small bad">${U.nickMsg}</p>`:''}
+  <div class="btn-row">${first?'<button class="btn" data-a="nickSkip">Позже</button>':'<button class="btn" data-a="close">Отмена</button>'}<button class="btn pri" data-a="nickGo">Сохранить</button></div></div>`;
+}
+async function nickSave(){
+  const el=document.getElementById('nickIn');const name=(el?el.value:'').trim().replace(/\s+/g,' ');
+  if(name.length<2){U.nickMsg='Минимум 2 символа.';render();return;}
+  try{
+    const r=await apiF('/api/profile/name',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})},8000);
+    if(r.status===401){CL.token=null;await cloudAuth();return nickSave();}
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok){U.nickMsg=j.reason||'Не подошло: 2–24 символа, буквы и цифры.';render();return;}
+    CL.nick=j.name;CL.name=j.name;CL.needName=false;U.nickMsg=null;U.sheet=null;toast('Имя сохранено: '+j.name);render();
+  }catch(e){U.nickMsg='Нет связи с сервером. Попробуйте позже.';render();}
+}
 function sheetMenu(){
   return `<div class="stack"><h3>Меню</h3>${cloudStatusHTML()}
   <div class="seg"><button data-a="sndOn" aria-pressed="${SND.on}">Звуки ${SND.on?'вкл':'выкл'}</button><button data-a="ambOn" aria-pressed="${SND.amb&&SND.on}" ${SND.on?'':'disabled'}>Шум трибун ${SND.amb?'вкл':'выкл'}</button></div>
@@ -2854,7 +2873,7 @@ function act(a,id){
   if(U.mode==='menu'&&a==='tourAgain'){mGo('career');if(S.user!=null)tourStart();render();return;}
   if(U.mode==='online'&&a==='tourAgain'){oTourStart();render();return;}
   if(U.mode==='online'&&a==='newYes')oModeSet(false);
-  if(U.mode!=='career'&&!['menu','close','veil','sndOn','ambOn','wn','help','codeOpen','codeGo','newGame','hintsReset','cloudKeep','cloudSheet','cloudTake','linkTg'].includes(a))return;
+  if(U.mode!=='career'&&!['menu','close','veil','sndOn','ambOn','wn','help','codeOpen','codeGo','newGame','hintsReset','cloudKeep','cloudSheet','cloudTake','linkTg','nick','nickGo','nickSkip'].includes(a))return;
   inv();
   const seq0=S.nseq||0;
   const n=Number(id),F=S.fin;
@@ -2876,6 +2895,9 @@ function act(a,id){
     case 'tourSkip':track('tour_skip',{i:U.tour?U.tour.i:0});U.tour=null;S.tutDone=true;break;
     case 'cloudSheet':U.sheet={type:'cloud'};break;
     case 'linkTg':linkStart();break;
+    case 'nick':U.nickMsg=null;U.sheet={type:'nick'};break;
+    case 'nickGo':nickSave();return;
+    case 'nickSkip':CL.needName=false;U.sheet=null;break;
     case 'codeOpen':U.codeMsg=null;U.sheet={type:'code'};break;
     case 'codeGo':{const el=document.getElementById('codeIn');U.codeMsg=useCode(el?el.value:'');if(U.codeMsg.ok){inv();}break;}
     case 'cloudTake':{U.sheet=null;stopTimer();const app=document.getElementById('app');if(app)app.innerHTML='<p class="muted" style="padding:48px 16px;text-align:center">Загружаю сохранение…</p>';
@@ -3000,7 +3022,7 @@ const tgHaptic=k=>{try{TG&&TG.HapticFeedback&&(k==='goal'?TG.HapticFeedback.noti
 /* ---------- cloud saves & stats (server) ---------- */
 const API=(typeof window!=='undefined'&&window.GM_API)||'';
 const CK='gm-cloud';
-const CL={on:false,token:null,ver:0,dirty:false,gen:0,st:'off',at:null,busy:false,t:null,q:[],conflict:null,tries:0};
+const CL={on:false,token:null,ver:0,dirty:false,gen:0,st:'off',at:null,busy:false,t:null,q:[],conflict:null,tries:0,name:null,nick:null,needName:false};
 /* Android-приложение (Capacitor): своя авторизация по устройству, кнопка «Назад», внешние ссылки */
 const CAP=typeof window!=='undefined'&&window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform()?window.Capacitor:null;
 const CapP=n=>CAP&&CAP.Plugins?CAP.Plugins[n]:null;
@@ -3076,7 +3098,8 @@ async function cloudAuth(){
   const r=await apiF(tg?'/api/auth':'/api/auth/device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(tg?{initData:TG.initData}:{...devCreds(),platform:'android'})},6000);
   if(r.status===403){try{const j=await r.json();if(j.error==='banned')CL.banned=j.reason||'Аккаунт заблокирован.';}catch(e){}throw new Error('banned');}
   if(!r.ok)throw new Error('auth '+r.status);
-  const a=await r.json();CL.token=a.token;CL.on=true;CL.st='ok';CL.linked=tg||!!(a.user&&a.user.linked);CL.uid=a.user&&a.user.id;return a;
+  const a=await r.json();CL.token=a.token;CL.on=true;CL.st='ok';CL.linked=tg||!!(a.user&&a.user.linked);CL.uid=a.user&&a.user.id;
+  CL.nick=a.user&&a.user.nick||null;CL.name=(a.user&&a.user.name)||null;CL.needName=!!(a.user&&a.user.created&&!CL.nick);return a;
 }
 async function cloudPull(){
   const r=await apiF('/api/save',{},15000);
@@ -4192,11 +4215,12 @@ function mAcc(){
   let tu=TG&&TG.initDataUnsafe&&TG.initDataUnsafe.user;
   if(!tu&&TG&&TG.initData){try{tu=JSON.parse(new URLSearchParams(TG.initData).get('user'));}catch(e){}}
   let who,sub,btn='';
-  if(tu){who=oEsc([tu.first_name,tu.last_name].filter(Boolean).join(' ')||'Игрок');sub=`Вход через Telegram${tu.username?' · @'+oEsc(tu.username):''}`;}
-  else if(CAP){who='Аккаунт на этом устройстве';sub=CL.linked?'Привязан Telegram: тот же прогресс в боте @hmrurubot':'Telegram не привязан';if(!CL.linked)btn='<button class="btn sm" data-a="linkTg">Привязать Telegram</button>';}
+  if(tu){who=oEsc(CL.name||[tu.first_name,tu.last_name].filter(Boolean).join(' ')||'Игрок');sub=`Вход через Telegram${tu.username?' · @'+oEsc(tu.username):''}`;}
+  else if(CAP){who=oEsc(CL.name||'Аккаунт на этом устройстве');sub=CL.linked?'Привязан Telegram: тот же прогресс в боте @hmrurubot':'Telegram не привязан';if(!CL.linked)btn='<button class="btn sm" data-a="linkTg">Привязать Telegram</button>';}
   else{who='Вы не вошли';sub='Карьера сохраняется только в этом браузере. Чтобы играть в онлайн-лиге и хранить прогресс в облаке, откройте игру в Telegram.';btn='<a class="btn sm" href="https://t.me/hmrurubot" target="_blank" rel="noopener">Открыть в Telegram</a>';}
+  if(cloudable()&&CL.token)btn+=(btn?' ':'')+'<button class="btn sm" data-a="nick">Сменить имя</button>';
   const st=cloudable()?(CL.conflict?'<span class="bad">сохранения разошлись</span>':CL.st==='ok'?'☁️ облако подключено':CL.st==='offline'?'нет связи с сервером':'подключаюсь…'):'';
-  const ini=(tu&&tu.first_name?tu.first_name[0]:CAP?'📱':'?').toUpperCase();
+  const ini=(CL.name?CL.name[0]:tu&&tu.first_name?tu.first_name[0]:CAP?'📱':'?').toUpperCase();
   return `<section class="card macc"><div class="orow"><span class="mava">${ini}</span><div><b>${who}</b><small>${sub}</small>${st?`<small>${st}${CL.uid?` · игрок №${CL.uid}`:''}</small>`:''}</div></div>${btn?`<div class="btn-row">${btn}${CL.conflict?'<button class="btn sm pri" data-a="cloudSheet">Выбрать сохранение</button>':''}</div>`:CL.conflict?'<div class="btn-row"><button class="btn sm pri" data-a="cloudSheet">Выбрать сохранение</button></div>':''}</section>`;
 }
 function mCareer(){
@@ -4234,9 +4258,10 @@ function viewMain(){
 function renderMain(){
   if(CL.banned)return renderBanned();
   const app=document.getElementById('app');
+  if(CL.needName&&!U.sheet)U.sheet={type:'nick'};
   let html=viewMain();
   if(U.sheet){const s=U.sheet;let inner='';
-    if(s.type==='menu')inner=sheetMenu();else if(s.type==='wn')inner=sheetWhatsNew();else if(s.type==='help')inner=sheetHelp();else if(s.type==='tacinfo')inner=sheetTacInfo();else if(s.type==='cloud')inner=sheetCloud();else if(s.type==='code')inner=sheetCode();
+    if(s.type==='menu')inner=sheetMenu();else if(s.type==='wn')inner=sheetWhatsNew();else if(s.type==='help')inner=sheetHelp();else if(s.type==='tacinfo')inner=sheetTacInfo();else if(s.type==='cloud')inner=sheetCloud();else if(s.type==='code')inner=sheetCode();else if(s.type==='nick')inner=sheetNick();
     html+=`<div class="veil" data-a="veil"><div class="sheet gut" role="dialog" aria-modal="true"><div class="grab"></div>${inner}</div></div>`;}
   if(U.toast)html+=`<div class="toast" role="status">${U.toast}</div>`;
   app.innerHTML=html;document.body.style.overflow='';tgSync();
