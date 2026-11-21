@@ -21,7 +21,7 @@ const initFor = (id, extra = {}) =>
 
 before(async () => {
   pool = makePool(url);
-  await pool.query('DROP TABLE IF EXISTS online_results, online_games, online_seasons, link_codes, devices, events, saves, users, _migrations CASCADE');
+  await pool.query('DROP TABLE IF EXISTS wallet_ops, wallets, admin_log, online_results, online_games, online_seasons, link_codes, devices, events, saves, users, _migrations CASCADE');
   await migrate(pool, { info() {} });
   app = buildApp({ pool, cfg, logger: false });
   await app.ready();
@@ -113,7 +113,7 @@ test('события и сводка', async () => {
   assert.ok(s.retention && 'cohort' in s.retention.d1);
   r = await app.inject({ method: 'GET', url: '/admin' });
   assert.equal(r.statusCode, 200);
-  assert.match(r.body, /Генменеджер · статистика/);
+  assert.match(r.body, /Генменеджер · админка/);
   r = await app.inject({ method: 'GET', url: '/privacy' });
   assert.match(r.body, /Политика конфиденциальности/);
 });
@@ -285,7 +285,9 @@ test('онлайн-сезон: создание, вход, расчёт, тра�
     let best3 = null, weak5 = null;
     for (const g of t3.players.filter((p) => p.pos !== 'G').sort((a, b) => b.ovr - a.ovr)) {
       const c = t5.players.filter((p) => p.pos !== 'G' && p.ovr <= g.ovr - 8 && g.sal - p.sal <= room5 && p.sal - g.sal <= room3).sort((a, b) => b.sal - a.sal)[0];
-      if (c) { best3 = g; weak5 = c; break; }
+      if (!c) continue;
+      const e = await online.tradeEval(a.user.id, { to: 5, give: [g.id], get: [c.id] }, sid);
+      if (e.deal) { best3 = g; weak5 = c; break; } // подбираем пару тем же расчётом, что и сервер
     }
     assert.ok(best3, 'нашлась пара для обмена');
     r = await oapp.inject({ method: 'POST', url: `/api/online/${sid}/trade`, headers: H, payload: { to: 5, give: [best3.id], get: [weak5.id] } });
@@ -554,4 +556,122 @@ test('онлайн: академия, прокачки, торги вслепу�
   assert.ok(n >= 2, `наследники перенесены: ${n}`);
   const inh = S2.players.filter((p) => p.team === -5);
   assert.ok(inh.every((p) => p.age >= 18), 'возраст +1 год');
+});
+
+test('админка: сессия по ключу, бан/разбан, кошелёк, удаление аккаунта, сезоны, журнал', async () => {
+  const html = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../index.html');
+  const online = makeOnline(pool, html, { info() {}, error() {} });
+  await online.init();
+  const oapp = buildApp({ pool, cfg, logger: false, online });
+  await oapp.ready();
+  try {
+    // вход по ключу: сессия работает, чужой токен — нет
+    let r = await oapp.inject({ method: 'POST', url: '/api/admin/login', payload: { key: 'wrong' } });
+    assert.equal(r.statusCode, 401);
+    r = await oapp.inject({ method: 'POST', url: '/api/admin/login', payload: { key: 'admin-key' } });
+    assert.equal(r.statusCode, 200);
+    const AT = { authorization: 'Bearer ' + r.json().token };
+    r = await oapp.inject({ method: 'GET', url: '/api/admin/users', headers: { authorization: 'Bearer forged.token.here' } });
+    assert.equal(r.statusCode, 401);
+    r = await oapp.inject({ method: 'GET', url: '/api/admin/users', headers: AT });
+    assert.equal(r.statusCode, 200);
+    assert.ok(r.json().total >= 1 && r.json().users.length >= 1);
+    // список сезонов (прошлые тесты оставили завершённые)
+    r = await oapp.inject({ method: 'GET', url: '/api/admin/seasons', headers: AT });
+    assert.ok(r.json().seasons.length >= 1);
+    assert.ok(r.json().seasons.every((s) => s.sid > 0 && s.name));
+    // сезон из формы админки
+    r = await oapp.inject({ method: 'POST', url: '/api/admin/seasons', headers: AT, payload: { template: 'test8', name: 'Админ-лига', fastSec: 3600 } });
+    assert.equal(r.statusCode, 200, r.body);
+    const sid = r.json().id;
+    // игрок входит; админ снимает его с клуба и возвращает
+    const a = (await oapp.inject({ method: 'POST', url: '/api/auth', payload: { initData: initFor(920) } })).json();
+    const H = { authorization: 'Bearer ' + a.token };
+    r = await oapp.inject({ method: 'POST', url: `/api/online/${sid}/join`, headers: H, payload: { team: 2 } });
+    assert.ok(r.json().ok);
+    r = await oapp.inject({ method: 'POST', url: `/api/admin/seasons/${sid}/human`, headers: AT, payload: { team: 2 } });
+    assert.ok(r.json().ok, 'клуб передан боту');
+    let v = (await oapp.inject({ method: 'GET', url: `/api/online/${sid}` })).json();
+    assert.equal(v.teams[2].human, null);
+    r = await oapp.inject({ method: 'POST', url: `/api/admin/seasons/${sid}/human`, headers: AT, payload: { team: 2, uid: a.user.id } });
+    assert.ok(r.json().ok, 'клуб возвращён человеку');
+    v = (await oapp.inject({ method: 'GET', url: `/api/online/${sid}` })).json();
+    assert.equal(v.teams[2].human.name, 'Тест');
+    // поиск участников и карточка
+    r = await oapp.inject({ method: 'GET', url: '/api/admin/users?q=' + encodeURIComponent('Тест'), headers: AT });
+    assert.ok(r.json().users.some((u) => u.id === a.user.id));
+    r = await oapp.inject({ method: 'GET', url: `/api/admin/users/${a.user.id}`, headers: AT });
+    const card = r.json();
+    assert.equal(card.clubs.length, 1);
+    assert.equal(card.clubs[0].sid, sid);
+    assert.equal(card.wallet, 0);
+    // бан: вход и игровые роуты отдают 403 banned с причиной
+    r = await oapp.inject({ method: 'POST', url: `/api/admin/users/${a.user.id}/ban`, headers: AT, payload: { banned: true, reason: 'Чит' } });
+    assert.equal(r.json().banned, true);
+    r = await oapp.inject({ method: 'POST', url: '/api/auth', payload: { initData: initFor(920) } });
+    assert.equal(r.statusCode, 403);
+    assert.equal(r.json().error, 'banned');
+    assert.equal(r.json().reason, 'Чит');
+    r = await oapp.inject({ method: 'GET', url: `/api/online/${sid}/fin`, headers: H });
+    assert.equal(r.statusCode, 403, 'игровые роуты закрыты');
+    assert.equal(r.json().error, 'banned');
+    r = await oapp.inject({ method: 'POST', url: `/api/admin/users/${a.user.id}/ban`, headers: AT, payload: { banned: false } });
+    assert.equal(r.json().banned, false);
+    r = await oapp.inject({ method: 'GET', url: `/api/online/${sid}/fin`, headers: H });
+    assert.equal(r.statusCode, 200, 'разбан вернул доступ');
+    // кошелёк: выдача, списание, отрицательный баланс запрещён
+    r = await oapp.inject({ method: 'POST', url: `/api/admin/users/${a.user.id}/wallet`, headers: AT, payload: { delta: 500, comment: 'Бонус' } });
+    assert.equal(r.json().balance, 500);
+    r = await oapp.inject({ method: 'POST', url: `/api/admin/users/${a.user.id}/wallet`, headers: AT, payload: { delta: -200, comment: 'Штраф' } });
+    assert.equal(r.json().balance, 300);
+    r = await oapp.inject({ method: 'POST', url: `/api/admin/users/${a.user.id}/wallet`, headers: AT, payload: { delta: -1000 } });
+    assert.equal(r.statusCode, 409);
+    assert.equal(r.json().error, 'negative');
+    r = await oapp.inject({ method: 'GET', url: `/api/admin/users/${a.user.id}`, headers: AT });
+    assert.equal(r.json().wallet, 300);
+    assert.equal(r.json().walletOps.length, 2);
+    // переименование
+    r = await oapp.inject({ method: 'POST', url: `/api/admin/users/${a.user.id}/rename`, headers: AT, payload: { name: 'Новое Имя' } });
+    assert.ok(r.json().ok);
+    // досрочное завершение: чемпион и итоги на месте
+    r = await oapp.inject({ method: 'POST', url: `/api/admin/seasons/${sid}/finish`, headers: AT });
+    assert.ok(r.json().ok);
+    v = (await oapp.inject({ method: 'GET', url: `/api/online/${sid}` })).json();
+    assert.notEqual(v.champ, null, 'чемпион есть');
+    assert.notEqual(v.results, null, 'итоги есть');
+    // завершённый сезон не удалить, архивировать — можно
+    r = await oapp.inject({ method: 'DELETE', url: `/api/admin/seasons/${sid}`, headers: AT });
+    assert.equal(r.statusCode, 409);
+    assert.equal(r.json().error, 'not_empty');
+    r = await oapp.inject({ method: 'POST', url: `/api/admin/seasons/${sid}/archive`, headers: AT });
+    assert.ok(r.json().ok);
+    // удаление аккаунта: клуб активного сезона уходит боту, аккаунт обезличен, итоги сохранены
+    r = await oapp.inject({ method: 'POST', url: '/api/admin/seasons', headers: AT, payload: { template: 'test8', name: 'Админ-лига 2', fastSec: 3600 } });
+    const sid2 = r.json().id;
+    r = await oapp.inject({ method: 'POST', url: `/api/online/${sid2}/join`, headers: H, payload: { team: 3 } });
+    assert.ok(r.json().ok);
+    r = await oapp.inject({ method: 'POST', url: `/api/admin/users/${a.user.id}/delete`, headers: AT });
+    assert.ok(r.json().ok);
+    assert.equal(r.json().clubs, 1, 'один клуб ушёл боту');
+    const v2 = (await oapp.inject({ method: 'GET', url: `/api/online/${sid2}` })).json();
+    assert.equal(v2.teams[3].human, null);
+    r = await oapp.inject({ method: 'GET', url: `/api/admin/users/${a.user.id}`, headers: AT });
+    assert.equal(r.json().user.first_name, 'Удалённый аккаунт');
+    assert.equal(r.json().user.tg_id, null);
+    assert.equal(r.json().user.banned, false);
+    assert.ok(r.json().results.length >= 1, 'строки итогов сохранены');
+    assert.ok(r.json().results.every((x) => x.name === 'Удалённый аккаунт'), 'и обезличены');
+    // audit log: на каждое действие — строка
+    r = await oapp.inject({ method: 'GET', url: '/api/admin/log', headers: AT });
+    const acts = new Set(r.json().log.map((x) => x.action));
+    for (const need of ['login', 'ban', 'unban', 'wallet', 'rename', 'season_create', 'season_finish', 'season_kick', 'season_give', 'season_archive', 'delete_user'])
+      assert.ok(acts.has(need), 'в журнале есть ' + need);
+    // пустой не начавшийся сезон удаляется
+    r = await oapp.inject({ method: 'POST', url: '/api/admin/seasons', headers: AT, payload: { template: 'test8', name: 'На удаление', fastSec: 3600 } });
+    const sid3 = r.json().id;
+    r = await oapp.inject({ method: 'DELETE', url: `/api/admin/seasons/${sid3}`, headers: AT });
+    assert.ok(r.json().ok);
+    r = await oapp.inject({ method: 'GET', url: `/api/online/${sid3}` });
+    assert.equal(r.statusCode, 404, 'удалённый сезон не отдаётся');
+  } finally { await oapp.close(); }
 });
