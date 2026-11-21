@@ -223,91 +223,121 @@ export function buildApp({ pool, cfg, logger = true, online = null }) {
     const h = req.headers.authorization || '', key = h.startsWith('Bearer ') ? h.slice(7) : '';
     return !!cfg.adminKey && key.length === cfg.adminKey.length && crypto.timingSafeEqual(Buffer.from(key), Buffer.from(cfg.adminKey));
   };
-  app.get('/api/online', async (req, reply) => {
-    if (!online || !online.active) return reply.code(404).send({ error: 'no_season' });
-    const uid = softUid(req);
-    if (uid) await online.touch(uid);
+  const sidOf = (req) => Number(req.params.sid);
+  // список турниров для экрана «Мои турниры»; без авторизации — только открытые лиги
+  app.get('/api/seasons', async (req, reply) => {
+    if (!online) return reply.code(404).send({ error: 'online_disabled' });
     reply.header('Cache-Control', 'no-store');
-    return online.view(uid);
+    return online.seasonsList(softUid(req));
   });
-  app.post('/api/online/join', { preHandler: auth }, async (req, reply) => {
-    if (!online || !online.active) return reply.code(404).send({ error: 'no_season' });
+  app.post('/api/seasons/:sid/join', { preHandler: auth }, async (req, reply) => {
+    if (!online) return reply.code(404).send({ error: 'online_disabled' });
     const team = Number(req.body?.team);
     const u = (await pool.query('SELECT first_name, username FROM users WHERE id=$1', [req.uid])).rows[0] || {};
-    const r = await online.join(req.uid, u.first_name || u.username || 'Менеджер', team);
+    const r = await online.join(req.uid, u.first_name || u.username || 'Менеджер', team, sidOf(req));
     if (r.error) return reply.code(409).send(r);
     return r;
   });
-  app.get('/api/online/game/:gid', async (req, reply) => {
-    if (!online || !online.active) return reply.code(404).send({ error: 'no_season' });
-    const g = await online.game(String(req.params.gid), Date.now(), softUid(req));
+  // старые версии приложения ходят без sid: редирект на последний активный открытый сезон
+  const legacy = (method) => async (req, reply) => {
+    if (!online) return reply.code(404).send({ error: 'online_disabled' });
+    const sid = await online.latestOpen();
+    if (sid == null) return reply.code(404).send({ error: 'no_season' });
+    const target = req.url.replace(/^\/api\/online/, `/api/online/${sid}`);
+    return method === 'POST' ? reply.redirect(target, 308) : reply.redirect(target);
+  };
+  app.get('/api/online/:sid', async (req, reply) => {
+    if (!online) return reply.code(404).send({ error: 'online_disabled' });
+    const uid = softUid(req);
+    if (uid) await online.touch(uid, sidOf(req));
+    const v = await online.view(uid, sidOf(req));
+    if (!v) return reply.code(404).send({ error: 'no_season' });
+    reply.header('Cache-Control', 'no-store');
+    return v;
+  });
+  app.post('/api/online/:sid/join', { preHandler: auth }, async (req, reply) => {
+    if (!online) return reply.code(404).send({ error: 'online_disabled' });
+    const team = Number(req.body?.team);
+    const u = (await pool.query('SELECT first_name, username FROM users WHERE id=$1', [req.uid])).rows[0] || {};
+    const r = await online.join(req.uid, u.first_name || u.username || 'Менеджер', team, sidOf(req));
+    if (r.error) return reply.code(409).send(r);
+    return r;
+  });
+  app.get('/api/online/:sid/game/:gid', async (req, reply) => {
+    if (!online) return reply.code(404).send({ error: 'online_disabled' });
+    const g = await online.game(String(req.params.gid), sidOf(req), Date.now(), softUid(req));
     if (!g) return reply.code(404).send({ error: 'no_game' });
     reply.header('Cache-Control', 'no-store');
     return g;
   });
-  app.get('/api/online/team/:id', async (req, reply) => {
-    if (!online || !online.active) return reply.code(404).send({ error: 'no_season' });
-    const v = online.team(Number(req.params.id), softUid(req));
+  app.get('/api/online/:sid/team/:id', async (req, reply) => {
+    if (!online) return reply.code(404).send({ error: 'online_disabled' });
+    const v = await online.team(Number(req.params.id), softUid(req), sidOf(req));
     if (!v) return reply.code(404).send({ error: 'no_team' });
     reply.header('Cache-Control', 'no-store');
     return v;
   });
-  app.post('/api/online/plan', { preHandler: auth }, async (req, reply) => {
-    if (!online || !online.active) return reply.code(404).send({ error: 'no_season' });
+  app.post('/api/online/:sid/plan', { preHandler: auth }, async (req, reply) => {
+    if (!online) return reply.code(404).send({ error: 'online_disabled' });
     const b = req.body || {};
-    const r = await online.plan(req.uid, b.key === 'def' ? 'def' : String(Number(b.key)), b.plan ?? null);
+    const r = await online.plan(req.uid, b.key === 'def' ? 'def' : String(Number(b.key)), b.plan ?? null, sidOf(req));
     if (r.error) return reply.code(409).send(r);
     return r;
   });
-  app.post('/api/online/lines', { preHandler: auth }, async (req, reply) => {
-    if (!online || !online.active) return reply.code(404).send({ error: 'no_season' });
-    const r = await online.lines(req.uid, req.body || {});
+  app.post('/api/online/:sid/lines', { preHandler: auth }, async (req, reply) => {
+    if (!online) return reply.code(404).send({ error: 'online_disabled' });
+    const r = await online.lines(req.uid, req.body || {}, sidOf(req));
     if (r.error) return reply.code(409).send(r);
     return r;
   });
-  app.get('/api/online/market', async (req, reply) => {
-    if (!online || !online.active) return reply.code(404).send({ error: 'no_season' });
+  app.get('/api/online/:sid/market', async (req, reply) => {
+    if (!online) return reply.code(404).send({ error: 'online_disabled' });
     reply.header('Cache-Control', 'no-store');
-    return online.market(softUid(req));
+    return online.market(softUid(req), sidOf(req));
   });
-  app.get('/api/online/academy', async (req, reply) => {
-    if (!online || !online.active) return reply.code(404).send({ error: 'no_season' });
+  app.get('/api/online/:sid/academy', async (req, reply) => {
+    if (!online) return reply.code(404).send({ error: 'online_disabled' });
     reply.header('Cache-Control', 'no-store');
-    const r = online.academy(softUid(req));
+    const r = await online.academy(softUid(req), sidOf(req));
     if (r && r.error) return reply.code(409).send(r);
     return r;
   });
-  app.get('/api/online/staff', async (req, reply) => {
-    if (!online || !online.active) return reply.code(404).send({ error: 'no_season' });
+  app.get('/api/online/:sid/staff', async (req, reply) => {
+    if (!online) return reply.code(404).send({ error: 'online_disabled' });
     reply.header('Cache-Control', 'no-store');
-    const r = online.staff(softUid(req));
+    const r = await online.staff(softUid(req), sidOf(req));
     if (r && r.error) return reply.code(409).send(r);
     return r;
   });
-  app.get('/api/online/fin', { preHandler: auth }, async (req, reply) => {
-    if (!online || !online.active) return reply.code(404).send({ error: 'no_season' });
+  app.get('/api/online/:sid/fin', { preHandler: auth }, async (req, reply) => {
+    if (!online) return reply.code(404).send({ error: 'online_disabled' });
     reply.header('Cache-Control', 'no-store');
-    const r = online.fin(req.uid);
+    const r = await online.fin(req.uid, sidOf(req));
     if (r.error) return reply.code(409).send(r);
     return r;
   });
-  app.get('/api/online/rating', async (req, reply) => {
+  app.get('/api/online/:sid/rating', async (req, reply) => {
     if (!online) return reply.code(404).send({ error: 'online_disabled' });
     reply.header('Cache-Control', 'no-store');
     return online.rating(softUid(req));
   });
-  app.post('/api/online/trade/eval', { preHandler: auth }, async (req, reply) => {
-    if (!online || !online.active) return reply.code(404).send({ error: 'no_season' });
-    return online.tradeEval(req.uid, req.body || {});
+  app.post('/api/online/:sid/trade/eval', { preHandler: auth }, async (req, reply) => {
+    if (!online) return reply.code(404).send({ error: 'online_disabled' });
+    return online.tradeEval(req.uid, req.body || {}, sidOf(req));
   });
   for (const [path, fn] of [['bid', 'bid'], ['poach', 'poachBid'], ['search', 'search'], ['take', 'take'], ['promote', 'promote'], ['upg', 'upg'], ['match', 'match'], ['release', 'release'], ['trade', 'trade'], ['trade/answer', 'answer'], ['prices', 'prices'], ['arena', 'arena'], ['coach/mode', 'coachMode'], ['coach/hire', 'coachHire'], ['sponsor', 'sponsor']]) {
-    app.post('/api/online/' + path, { preHandler: auth }, async (req, reply) => {
-      if (!online || !online.active) return reply.code(404).send({ error: 'no_season' });
-      const r = await online[fn](req.uid, req.body || {});
+    app.post('/api/online/:sid/' + path, { preHandler: auth }, async (req, reply) => {
+      if (!online) return reply.code(404).send({ error: 'online_disabled' });
+      const r = await online[fn](req.uid, req.body || {}, sidOf(req));
       if (r && r.error) return reply.code(409).send(r);
       return r;
     });
   }
+  // редиректы для старых версий приложения (без sid в пути)
+  app.get('/api/online', legacy('GET'));
+  app.post('/api/online/join', { preHandler: auth }, legacy('POST'));
+  app.get('/api/online/rating', legacy('GET'));
+  for (const p of ['game/:gid', 'team/:id', 'market', 'academy', 'staff', 'fin']) app.get('/api/online/' + p, legacy('GET'));
   app.post('/api/admin/online/create', async (req, reply) => {
     if (!adminOk(req)) return reply.code(401).send({ error: 'unauthorized' });
     if (!online) return reply.code(503).send({ error: 'online_disabled' });

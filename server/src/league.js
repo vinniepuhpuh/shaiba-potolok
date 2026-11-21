@@ -484,7 +484,7 @@ export function publicView(G, S, now, uid) {
     return { a: s.a, b: s.b, wa, wb };
   }));
   const champSlot = o.champ != null ? o.slots.filter((s) => s.kind === 'po').pop() : null;
-  const champ = o.champ != null && champSlot && !live(champSlot) ? o.champ : null;
+  const champ = o.champ != null && (!champSlot || !live(champSlot)) ? o.champ : null;
   let my = null;
   for (const [tid, h] of Object.entries(o.humans)) if (h && h.uid === uid) my = { team: +tid, bot: !!h.bot };
   // итоги и награды — только когда финал показан целиком
@@ -584,8 +584,9 @@ export function setLines(G, S, uid, body, now = Date.now()) {
   return { ok: true, lines: linesFor(G, S, tid) };
 }
 
-/** Пуш-напоминания о матчах: за NOTIFY_BEFORE до старта слота — по сообщению каждому менеджеру о его игре. */
-export function dueNotifications(S, now = Date.now()) {
+/** Пуш-напоминания о матчах: за NOTIFY_BEFORE до старта слота — по сообщению каждому менеджеру о его игре.
+ * label — короткое имя турнира: с ним в нескольких лигах понятно, о каком матче речь. */
+export function dueNotifications(S, now = Date.now(), label = null) {
   const o = S.online, out = [];
   if (!o || o.champ != null) return out;
   o.notified = o.notified || {};
@@ -612,7 +613,7 @@ export function dueNotifications(S, now = Date.now()) {
         if (!m || m.bot || m.uid == null) continue;
         const derby = g.derby ? ' 🔥 Дерби!' : '';
         out.push({ uid: m.uid, slot: slot.i, gid: g.id,
-          text: `🏒 Через 10 минут: «${H.name}» — «${A.name}» (${msk(start)} МСК).${derby}\n` +
+          text: `🏒 ${label ? label + ': ' : ''}Через 10 минут: «${H.name}» — «${A.name}» (${msk(start)} МСК).${derby}\n` +
                 `${seriesInfo}Зайдите в игру к началу: поддержка менеджера на арене даёт клубу бонус.` });
       }
     }

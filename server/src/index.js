@@ -22,6 +22,7 @@ const cfg = {
   webhookSecret: env.BOT_WEBHOOK_SECRET || '',
   initDataMaxAge: Number(env.INIT_DATA_MAX_AGE || 86400),
   rateLimit: Number(env.RATE_LIMIT || 240),
+  maxSeasonsPerUser: Number(env.MAX_SEASONS_PER_USER || 3),
   tgRelay: env.TG_RELAY || 'https://shaiba-potolok.vercel.app/api/tg',
   webhookVia: env.WEBHOOK_VIA || 'https://shaiba-potolok.vercel.app/api/tghook',
 };
@@ -40,7 +41,7 @@ await migrate(pool);
 const gameHtml = env.GAME_HTML || '/app/www/index.html';
 let online = null;
 if (fs.existsSync(gameHtml)) {
-  try { online = makeOnline(pool, gameHtml, console); await online.init(); } catch (e) { console.error('онлайн-режим не запустился:', e); online = null; }
+  try { online = makeOnline(pool, gameHtml, console, { maxSeasonsPerUser: cfg.maxSeasonsPerUser }); await online.init(); } catch (e) { console.error('онлайн-режим не запустился:', e); online = null; }
 } else console.warn(`онлайн-режим выключен: нет ${gameHtml}`);
 const app = buildApp({ pool, cfg, online });
 if (online) setInterval(() => online.tick().catch((e) => app.log.error({ err: e }, 'online tick failed')), 5000).unref();
@@ -54,7 +55,7 @@ if (online) setInterval(async () => {
       await tg(cfg, 'sendMessage', {
         chat_id: row.tg_id,
         text: n.text,
-        reply_markup: { inline_keyboard: [[{ text: '🏒 К матчу', web_app: { url: cfg.gameUrl } }]] },
+        reply_markup: { inline_keyboard: [[{ text: '🏒 К матчу', web_app: { url: `${cfg.gameUrl}?sid=${n.sid}` } }]] },
       }).catch((e) => app.log.warn(`push ${n.uid}: ${e.message}`));
     }
   } catch (e) { app.log.error({ err: e }, 'online notify failed'); }
