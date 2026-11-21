@@ -175,12 +175,9 @@ export function buildApp({ pool, cfg, logger = true, online = null }) {
     return { ok: true, n: rows.length };
   });
 
-  // Сводка для владельца игры: /api/admin/stats с заголовком Authorization: Bearer <ADMIN_KEY>
+  // Сводка для владельца игры: принимает и ключ ADMIN_KEY, и админ-сессию из /api/admin/login
   app.get('/api/admin/stats', async (req, reply) => {
-    const h = req.headers.authorization || '';
-    const key = h.startsWith('Bearer ') ? h.slice(7) : '';
-    if (!cfg.adminKey || key.length !== cfg.adminKey.length || !crypto.timingSafeEqual(Buffer.from(key), Buffer.from(cfg.adminKey)))
-      return reply.code(401).send({ error: 'unauthorized' });
+    if (!adminOk(req)) return reply.code(401).send({ error: 'unauthorized' });
     const q = async (sql) => (await pool.query(sql)).rows;
     const [tot] = await q(`SELECT count(*)::int AS users,
       count(*) FILTER (WHERE last_seen > now()-interval '1 day')::int AS dau,
