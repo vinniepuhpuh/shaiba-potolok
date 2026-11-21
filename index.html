@@ -2794,7 +2794,15 @@ function sheetMenu(){
 }
 
 /* ---------- render ---------- */
+function renderBanned(){
+  const app=document.getElementById('app');
+  app.innerHTML=`<main class="gut"><section class="card hl"><h2>Аккаунт заблокирован</h2>
+  <p class="small">${oEsc(CL.banned||'Доступ к игре ограничен.')}</p>
+  <p class="small muted">Если это ошибка, напишите в поддержку — в канале игры или боту @hmrurubot.</p></section></main>`;
+  document.body.style.overflow='';tgSync();
+}
 function render(){
+  if(CL.banned)return renderBanned();
   if(U.mode==='menu'){renderMain();return;}
   if(U.mode==='online'){renderOnline();return;}
   inv();
@@ -3066,6 +3074,7 @@ const hhmm=iso=>{try{const d=new Date(iso);return d.toLocaleDateString('ru-RU',{
 async function cloudAuth(){
   const tg=!!(TG&&TG.initData);
   const r=await apiF(tg?'/api/auth':'/api/auth/device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(tg?{initData:TG.initData}:{...devCreds(),platform:'android'})},6000);
+  if(r.status===403){try{const j=await r.json();if(j.error==='banned')CL.banned=j.reason||'Аккаунт заблокирован.';}catch(e){}throw new Error('banned');}
   if(!r.ok)throw new Error('auth '+r.status);
   const a=await r.json();CL.token=a.token;CL.on=true;CL.st='ok';CL.linked=tg||!!(a.user&&a.user.linked);CL.uid=a.user&&a.user.id;return a;
 }
@@ -3495,6 +3504,7 @@ async function oPost(path,body){
   let r=await apiF(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})},10000);
   if(r.status===401){CL.token=null;if(await oAuth())r=await apiF(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})},10000);}
   const j=await r.json().catch(()=>({}));
+  if(r.status===403&&j.error==='banned'){CL.banned=j.reason||'Аккаунт заблокирован.';render();return null;}
   if(!r.ok){toast((j.issues&&j.issues[0])||OERR[j.error]||'Не получилось, попробуйте ещё раз.');return null;}
   return j;
 }
@@ -3881,6 +3891,7 @@ function oMatchView(){
 }
 /* ---------- экран ---------- */
 function renderOnline(){
+  if(CL.banned)return renderBanned();
   const app=document.getElementById('app');
   let main;
   if(!OL.sid)main=oViewTours();
@@ -4221,6 +4232,7 @@ function viewMain(){
   <p class="small muted center">Новости и обновления — в канале игры. Бот: @hmrurubot</p></main>`;
 }
 function renderMain(){
+  if(CL.banned)return renderBanned();
   const app=document.getElementById('app');
   let html=viewMain();
   if(U.sheet){const s=U.sheet;let inner='';

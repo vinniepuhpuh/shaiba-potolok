@@ -294,6 +294,8 @@ export function makeOnline(pool, htmlPath, log = console, opts = {}) {
     const rows = (await pool.query(
       `SELECT id, name, status, updated_at,
          state->'online'->>'champ' AS champ,
+         CASE WHEN (state->'online'->>'champ') ~ '^[0-9]+$'
+              THEN (state->'teams'->((state->'online'->>'champ')::int))->>'name' END AS champ_name,
          state->'online'->'cfg'->>'test' AS test,
          state->'online'->'cfg'->>'big' AS big,
          (state->'online'->'slots'->0->>'t')::double precision AS start,
@@ -315,9 +317,21 @@ export function makeOnline(pool, htmlPath, log = console, opts = {}) {
         start: o && o.slots[0] ? o.slots[0].t : r.start,
         day: o ? `${done}/${o.slots.length}` : r.day != null ? String(r.day) : '—',
         champ: o ? o.champ : r.champ != null ? Number(r.champ) : null,
+        champName: o && o.champ != null ? (rec.S.teams[o.champ] || {}).name || null : r.champ_name || null,
         updated_at: r.updated_at,
       };
     });
+  }
+  /** Клубы uid в активных сезонах (для карточки участника в админке). */
+  async function userClubs(uid) {
+    const out = [];
+    for (const rec of seasons.values()) {
+      const o = rec.S.online;
+      for (const [tid, h] of Object.entries(o.humans)) {
+        if (h && h.uid === uid) out.push({ sid: rec.sid, name: o.cfg.name, team: +tid, club: rec.S.teams[tid].name, bot: !!h.bot, active: o.champ == null, test: !!o.cfg.test });
+      }
+    }
+    return out.sort((a, b) => b.sid - a.sid);
   }
   async function view(uid, sid, now = Date.now()) {
     const rec = await loadSeason(sid);
@@ -436,7 +450,7 @@ export function makeOnline(pool, htmlPath, log = console, opts = {}) {
     return staffView(G, rec.S, uid, now);
   }
   return { init, tick, create, view, join, touch, game, team, plan, lines, market, tradeEval, fin, rating, notify, academy, staff,
-    seasonsList, latestOpen, finishSeason, archiveSeason, deleteSeason, setHuman, dropUser, adminSeasons,
+    seasonsList, latestOpen, finishSeason, archiveSeason, deleteSeason, setHuman, dropUser, adminSeasons, userClubs,
     prices: mut(setPrices), arena: mut((G_, S_, uid) => buyArena(G_, S_, uid)),
     bid: mut(bidFA), poachBid: mut(bidPoach), search: mut((G_, S_, uid, b, now) => acadSearch(G_, S_, uid, now)),
     take: mut(acadTake), promote: mut(acadPromote), upg: mut(buyUpg), match: mut(poachMatch), release: mut(releasePlayer),
