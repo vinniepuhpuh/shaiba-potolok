@@ -72,12 +72,12 @@ export function buildApp({ pool, cfg, logger = true, online = null }) {
     const r = await pool.query(
       `INSERT INTO users (tg_id, first_name, username, lang) VALUES ($1,$2,$3,$4)
        ON CONFLICT (tg_id) DO UPDATE SET first_name=EXCLUDED.first_name, username=EXCLUDED.username, lang=EXCLUDED.lang, last_seen=now()
-       RETURNING id, (xmax = 0) AS created, banned, ban_reason`,
+       RETURNING id, nick, (xmax = 0) AS created, banned, ban_reason`,
       [u.id, u.first_name || null, u.username || null, u.language_code || null]
     );
-    const { id, created, banned, ban_reason } = r.rows[0];
+    const { id, nick, created, banned, ban_reason } = r.rows[0];
     if (banned) return reply.code(403).send({ error: 'banned', reason: ban_reason || 'Аккаунт заблокирован.' });
-    return { token: issueToken(id, cfg.sessionSecret), user: { id, name: u.first_name || '', created, linked: true }, save: await saveInfo(id) };
+    return { token: issueToken(id, cfg.sessionSecret), user: { id, name: nick || u.first_name || '', nick: nick || null, created, linked: true }, save: await saveInfo(id) };
   });
 
   // Вход из Android-приложения: устройство присылает свой случайный id и секрет
@@ -98,8 +98,18 @@ export function buildApp({ pool, cfg, logger = true, online = null }) {
       await pool.query('INSERT INTO devices (id, secret_hash, user_id, platform) VALUES ($1,$2,$3,$4)', [id, hash, uid, platform]);
       created = true;
     }
-    const u = (await pool.query('SELECT tg_id, first_name FROM users WHERE id=$1', [uid])).rows[0];
-    return { token: issueToken(uid, cfg.sessionSecret), user: { id: uid, name: u.first_name || '', created, linked: u.tg_id != null }, save: await saveInfo(uid) };
+    const u = (await pool.query('SELECT tg_id, first_name, nick FROM users WHERE id=$1', [uid])).rows[0];
+    return { token: issueToken(uid, cfg.sessionSecret), user: { id: uid, name: u.nick || u.first_name || '', nick: u.nick || null, created, linked: u.tg_id != null }, save: await saveInfo(uid) };
+  });
+
+  // Игровой никнейм: задаёт сам игрок, виден соперникам в онлайн-лиге
+  app.post('/api/profile/name', { preHandler: auth }, async (req, reply) => {
+    const name = String(req.body?.name || '').trim().replace(/\s+/g, ' ');
+    if (!/^[\p{L}\p{N}][\p{L}\p{N} ._'-]{1,23}$/u.test(name)) {
+      return reply.code(400).send({ error: 'bad_name', reason: 'От 2 до 24 символов: буквы, цифры, пробел, дефис, апостроф.' });
+    }
+    await pool.query('UPDATE users SET nick=$2, last_seen=now() WHERE id=$1', [req.uid, name]);
+    return { ok: true, name };
   });
 
   // Код для привязки Telegram: приложение открывает бота с этим кодом
@@ -230,12 +240,9 @@ export function buildApp({ pool, cfg, logger = true, online = null }) {
     return { ok: true, n: rows.length };
   });
 
-  // Сводка для владельца игры: /api/admin/stats с заголовком Authorization: Bearer <ADMIN_KEY>
+  // Сводка для владельца игры: принимает и ключ ADMIN_KEY, и админ-сессию из /api/admin/login
   app.get('/api/admin/stats', async (req, reply) => {
-    const h = req.headers.authorization || '';
-    const key = h.startsWith('Bearer ') ? h.slice(7) : '';
-    if (!cfg.adminKey || key.length !== cfg.adminKey.length || !crypto.timingSafeEqual(Buffer.from(key), Buffer.from(cfg.adminKey)))
-      return reply.code(401).send({ error: 'unauthorized' });
+    if (!adminOk(req)) return reply.code(401).send({ error: 'unauthorized' });
     const q = async (sql) => (await pool.query(sql)).rows;
     const [tot] = await q(`SELECT count(*)::int AS users,
       count(*) FILTER (WHERE last_seen > now()-interval '1 day')::int AS dau,
@@ -271,6 +278,7 @@ export function buildApp({ pool, cfg, logger = true, online = null }) {
   // Страница статистики (данные она берёт из /api/admin/stats по ключу, который вводится на странице)
   const adminHtml = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'admin', 'index.html'));
   app.get('/admin', async (req, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store').header('X-Robots-Tag', 'noindex').send(adminHtml));
+  app.get('/admin/', async (req, reply) => reply.redirect('/admin', 301)); // со слэшем — не попадать в фолбэк игры
   const privacyHtml = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'admin', 'privacy.html'));
   app.get('/privacy', async (req, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'public, max-age=3600').send(privacyHtml));
 
@@ -312,8 +320,8 @@ export function buildApp({ pool, cfg, logger = true, online = null }) {
   app.post('/api/seasons/:sid/join', { preHandler: auth }, async (req, reply) => {
     if (!online) return reply.code(404).send({ error: 'online_disabled' });
     const team = Number(req.body?.team);
-    const u = (await pool.query('SELECT first_name, username FROM users WHERE id=$1', [req.uid])).rows[0] || {};
-    const r = await online.join(req.uid, u.first_name || u.username || 'Менеджер', team, sidOf(req));
+    const u = (await pool.query('SELECT first_name, username, nick FROM users WHERE id=$1', [req.uid])).rows[0] || {};
+    const r = await online.join(req.uid, u.nick || u.first_name || u.username || 'Менеджер', team, sidOf(req));
     if (r.error) return reply.code(409).send(r);
     return r;
   });
@@ -337,8 +345,8 @@ export function buildApp({ pool, cfg, logger = true, online = null }) {
   app.post('/api/online/:sid/join', { preHandler: auth }, async (req, reply) => {
     if (!online) return reply.code(404).send({ error: 'online_disabled' });
     const team = Number(req.body?.team);
-    const u = (await pool.query('SELECT first_name, username FROM users WHERE id=$1', [req.uid])).rows[0] || {};
-    const r = await online.join(req.uid, u.first_name || u.username || 'Менеджер', team, sidOf(req));
+    const u = (await pool.query('SELECT first_name, username, nick FROM users WHERE id=$1', [req.uid])).rows[0] || {};
+    const r = await online.join(req.uid, u.nick || u.first_name || u.username || 'Менеджер', team, sidOf(req));
     if (r.error) return reply.code(409).send(r);
     return r;
   });
@@ -428,11 +436,11 @@ export function buildApp({ pool, cfg, logger = true, online = null }) {
   });
 
   // ---------- админ-панель: участники ----------
-  const USER_COLS = 'u.id, u.first_name, u.username, u.tg_id, u.banned, u.created_at, u.last_seen';
+  const USER_COLS = 'u.id, u.first_name, u.nick, u.username, u.tg_id, u.banned, u.created_at, u.last_seen';
   const userFilter = (q) => {
     const w = [];
     const p = [];
-    if (q) { w.push('(u.first_name ILIKE $1 OR u.username ILIKE $1 OR u.id::text = $1)'); p.push('%' + q + '%'); }
+    if (q) { w.push('(u.first_name ILIKE $1 OR u.nick ILIKE $1 OR u.username ILIKE $1 OR u.id::text = $1)'); p.push('%' + q + '%'); }
     return { where: w.length ? 'WHERE ' + w.join(' AND ') : '', params: p };
   };
   app.get('/api/admin/users', async (req, reply) => {
@@ -482,9 +490,9 @@ export function buildApp({ pool, cfg, logger = true, online = null }) {
   app.post('/api/admin/users/:id/rename', async (req, reply) => {
     if (!needAdmin(req, reply)) return;
     const id = Number(req.params.id);
-    const name = String(req.body?.name || '').trim().slice(0, 60);
+    const name = String(req.body?.name || '').trim().replace(/\s+/g, ' ').slice(0, 24);
     if (!name) return reply.code(400).send({ error: 'bad_name' });
-    const r = await pool.query('UPDATE users SET first_name=$2 WHERE id=$1 RETURNING id', [id, name]);
+    const r = await pool.query('UPDATE users SET nick=$2 WHERE id=$1 RETURNING id', [id, name]);
     if (!r.rows[0]) return reply.code(404).send({ error: 'no_user' });
     await alog(req, 'rename', id, { name });
     return { ok: true, name };
@@ -508,7 +516,7 @@ export function buildApp({ pool, cfg, logger = true, online = null }) {
       await c.query('DELETE FROM career_rewards WHERE uid=$1', [id]);
       await c.query('DELETE FROM assistant_purchases WHERE uid=$1', [id]);
       await c.query("UPDATE online_results SET name='Удалённый аккаунт' WHERE uid=$1", [id]);
-      await c.query("UPDATE users SET tg_id=NULL, first_name='Удалённый аккаунт', username=NULL, banned=false, ban_reason=NULL WHERE id=$1", [id]);
+      await c.query("UPDATE users SET tg_id=NULL, first_name='Удалённый аккаунт', nick=NULL, username=NULL, banned=false, ban_reason=NULL WHERE id=$1", [id]);
       await c.query('COMMIT');
     } catch (e) {
       await c.query('ROLLBACK').catch(() => {});
@@ -598,9 +606,9 @@ export function buildApp({ pool, cfg, logger = true, online = null }) {
       r = await online.setHuman(sid, team, null);
     } else {
       const uid = Number(req.body.uid);
-      const u = (await pool.query('SELECT first_name, username FROM users WHERE id=$1', [uid])).rows[0];
+      const u = (await pool.query('SELECT first_name, username, nick FROM users WHERE id=$1', [uid])).rows[0];
       if (!u) return reply.code(404).send({ error: 'no_user' });
-      r = await online.setHuman(sid, team, uid, u.first_name || u.username || 'Менеджер');
+      r = await online.setHuman(sid, team, uid, u.nick || u.first_name || u.username || 'Менеджер');
     }
     if (r.error) return reply.code(409).send(r);
     await alog(req, req.body?.uid == null ? 'season_kick' : 'season_give', sid, { team, uid: req.body?.uid ?? null });

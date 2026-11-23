@@ -156,7 +156,7 @@ function renderUsers(r){
     <input id="q" placeholder="Имя, username или id" value="${esc(cache.q||'')}" style="flex:1;min-width:200px">
     <button id="qs">Найти</button>${cache.q?'<button id="qc">Сбросить</button>':''}</div>
   <table><tr><th>ID</th><th>Имя</th><th>Платформа</th><th>Зарегистрирован</th><th>Последний визит</th><th class="r">Сезонов</th><th></th></tr>
-  ${r.users.map(u=>`<tr class="u" data-id="${u.id}"><td>${u.id}</td><td><b>${esc(u.first_name||'—')}</b>${u.username?' <span class="mut">@'+esc(u.username)+'</span>':''}${u.tg_id?'':' <span class="mut">(устройство)</span>'}</td>
+  ${r.users.map(u=>`<tr class="u" data-id="${u.id}"><td>${u.id}</td><td><b>${esc(u.nick||u.first_name||'—')}</b>${u.nick&&u.first_name&&u.nick!==u.first_name?' <span class="mut">('+esc(u.first_name)+')</span>':''}${u.username?' <span class="mut">@'+esc(u.username)+'</span>':''}${u.tg_id?'':' <span class="mut">(устройство)</span>'}</td>
     <td>${esc(u.platform||'tg')}</td><td class="mono">${hhmm(u.created_at)}</td><td class="mono">${hhmm(u.last_seen)}</td>
     <td class="r">${u.seasons}</td><td>${u.banned?'<span class="badge bad">бан</span>':''}</td></tr>`).join('')||'<tr><td colspan="7" class="mut">Никого не нашли.</td></tr>'}
   </table>
@@ -176,7 +176,7 @@ async function userCard(id){
   let c;try{c=await api('/api/admin/users/'+id);}catch(e){el.innerHTML=`<div class="card"><p class="err">${esc(e.message)}</p></div>`;return;}
   const u=c.user;
   el.innerHTML=`<div class="card"><div class="row" style="justify-content:space-between">
-    <h2 style="margin:0">${esc(u.first_name||'—')} <small>id ${u.id}${u.username?' · @'+esc(u.username):''}${u.tg_id?'':' · устройство '+esc(u.platform||'')}</small></h2>
+    <h2 style="margin:0">${esc(u.nick||u.first_name||'—')} <small>id ${u.id}${u.nick&&u.first_name&&u.nick!==u.first_name?' · Telegram: '+esc(u.first_name):''}${u.username?' · @'+esc(u.username):''}${u.tg_id?'':' · устройство '+esc(u.platform||'')}</small></h2>
     ${u.banned?'<span class="badge bad">заблокирован'+(u.ban_reason?': '+esc(u.ban_reason):'')+'</span>':'<span class="badge good">активен</span>'}
   </div>
   <div class="kv">
@@ -205,7 +205,7 @@ async function userCard(id){
   };
   $('#ucard #unban').onclick=async()=>{try{await post(`/api/admin/users/${id}/ban`,{banned:false});userCard(id);}catch(e){alert(e.message);}};
   $('#ucard #ren').onclick=async()=>{
-    const name=prompt('Новое отображаемое имя:',u.first_name||'');if(!name)return;
+    const name=prompt('Новый никнейм (виден в онлайн-лиге, не затирается Telegram):',u.nick||u.first_name||'');if(!name)return;
     try{await post(`/api/admin/users/${id}/rename`,{name});userCard(id);}catch(e){alert(e.message);}
   };
   $('#ucard #wal').onclick=async()=>{
@@ -216,7 +216,7 @@ async function userCard(id){
     try{await post(`/api/admin/users/${id}/wallet`,{delta,comment});userCard(id);}catch(e){alert(e.message);}
   };
   $('#ucard #del').onclick=async()=>{
-    if(!confirm(`Удалить аккаунт ${id} (${u.first_name||'—'})?\nКлубы в активных турнирах уйдут компьютеру, привязки и сохранения будут стёрты, имя в итогах сменится на «Удалённый аккаунт». Действие необратимо.`))return;
+    if(!confirm(`Удалить аккаунт ${id} (${u.nick||u.first_name||'—'})?\nКлубы в активных турнирах уйдут компьютеру, привязки и сохранения будут стёрты, имя в итогах сменится на «Удалённый аккаунт». Действие необратимо.`))return;
     try{const r=await post(`/api/admin/users/${id}/delete`);alert('Удалён. Клубов у компьютера: '+r.clubs);cache={};load();}catch(e){alert(e.message);}
   };
 }
