@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { verifyInitData, issueToken, readToken, issueAdminToken, readAdminToken } from './auth.js';
 import { ratingFrom } from './awards.js';
 import { handleUpdate } from './bot.js';
+import { awardCareerCash, buyAssistant, CAREER_ID, readCareer, rewardsView } from './rewards.js';
 
 const EVENT_TYPES = new Set(['open', 'team', 'tour', 'tour_skip', 'season', 'fired', 'live', 'error']);
 const MAX_SAVE = 4 * 1024 * 1024;
@@ -138,7 +139,7 @@ export function buildApp({ pool, cfg, logger = true, online = null }) {
     const c = await pool.connect();
     try {
       await c.query('BEGIN');
-      const cur = await c.query('SELECT ver, meta, updated_at FROM saves WHERE user_id=$1 AND slot=0 FOR UPDATE', [req.uid]);
+      const cur = await c.query('SELECT ver, meta, updated_at, data, enc FROM saves WHERE user_id=$1 AND slot=0 FOR UPDATE', [req.uid]);
       const row = cur.rows[0];
       if (row && row.ver !== base && !force) {
         await c.query('ROLLBACK');
@@ -150,11 +151,65 @@ export function buildApp({ pool, cfg, logger = true, online = null }) {
          ON CONFLICT (user_id, slot) DO UPDATE SET ver=$2, enc=$3, data=$4, meta=$5, size=$6, updated_at=now()`,
         [req.uid, ver, enc, body, meta, body.length]
       );
+      const career = readCareer(body, enc);
+      const oldCareerId = row && readCareer(row.data, row.enc)?.careerId;
+      if (CAREER_ID.test(oldCareerId || '') && CAREER_ID.test(career?.careerId || '') && oldCareerId !== career.careerId) {
+        await c.query('DELETE FROM assistant_purchases WHERE uid=$1 AND scope=$2', [req.uid, `career:${oldCareerId}`]);
+      }
+      await awardCareerCash(c, req.uid, career);
       await c.query('COMMIT');
       return { ver };
     } catch (e) {
       await c.query('ROLLBACK').catch(() => {});
       throw e;
+    } finally {
+      c.release();
+    }
+  });
+
+  app.get('/api/rewards', { preHandler: auth }, async (req, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    return rewardsView(pool, req.uid);
+  });
+
+  app.post('/api/rewards/assistant', { preHandler: auth }, async (req, reply) => {
+    const { careerId, seasonId } = req.body || {};
+    let scope;
+    if (Number.isSafeInteger(seasonId) && seasonId > 0) {
+      const season = await online?.view(req.uid, seasonId);
+      if (!season?.my || season.my.bot || season.champ != null) return reply.code(409).send({ error: 'inactive_season' });
+      scope = `online:${seasonId}`;
+    } else if (typeof careerId === 'string' && CAREER_ID.test(careerId)) {
+      scope = `career:${careerId}`;
+    } else {
+      return reply.code(400).send({ error: 'invalid_scope' });
+    }
+    const c = await pool.connect();
+    try {
+      await c.query('BEGIN');
+      if (scope.startsWith('career:')) {
+        const { rows: [row] } = await c.query('SELECT data, enc FROM saves WHERE user_id=$1 AND slot=0 FOR UPDATE', [req.uid]);
+        if (!row || readCareer(row.data, row.enc)?.careerId !== careerId) {
+          await c.query('ROLLBACK');
+          return reply.code(409).send({ error: 'career_not_synced' });
+        }
+      } else {
+        const season = await c.query("SELECT id FROM online_seasons WHERE id=$1 AND status='active' FOR SHARE", [seasonId]);
+        if (!season.rowCount) {
+          await c.query('ROLLBACK');
+          return reply.code(409).send({ error: 'inactive_season' });
+        }
+      }
+      if (!await buyAssistant(c, req.uid, scope)) {
+        await c.query('ROLLBACK');
+        return reply.code(409).send({ error: 'insufficient_balance' });
+      }
+      const view = await rewardsView(c, req.uid);
+      await c.query('COMMIT');
+      return view;
+    } catch (error) {
+      await c.query('ROLLBACK').catch(() => {});
+      throw error;
     } finally {
       c.release();
     }
@@ -450,6 +505,8 @@ export function buildApp({ pool, cfg, logger = true, online = null }) {
       await c.query('DELETE FROM saves WHERE user_id=$1', [id]);
       await c.query('DELETE FROM events WHERE user_id=$1', [id]);
       await c.query('UPDATE wallets SET balance=0 WHERE uid=$1', [id]);
+      await c.query('DELETE FROM career_rewards WHERE uid=$1', [id]);
+      await c.query('DELETE FROM assistant_purchases WHERE uid=$1', [id]);
       await c.query("UPDATE online_results SET name='Удалённый аккаунт' WHERE uid=$1", [id]);
       await c.query("UPDATE users SET tg_id=NULL, first_name='Удалённый аккаунт', username=NULL, banned=false, ban_reason=NULL WHERE id=$1", [id]);
       await c.query('COMMIT');

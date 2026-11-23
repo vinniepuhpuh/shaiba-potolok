@@ -21,6 +21,16 @@ export async function linkTelegram(pool, code, from) {
     const hasT = (await c.query('SELECT 1 FROM saves WHERE user_id=$1', [t])).rowCount > 0;
     if (!hasT) await c.query('UPDATE saves SET user_id=$1 WHERE user_id=$2', [t, d]);
     await c.query('UPDATE events SET user_id=$1 WHERE user_id=$2', [t, d]);
+    await c.query(`INSERT INTO wallets (uid,balance) SELECT $1,balance FROM wallets WHERE uid=$2
+      ON CONFLICT (uid) DO UPDATE SET balance=wallets.balance+EXCLUDED.balance, updated_at=now()`, [t, d]);
+    await c.query(`INSERT INTO career_rewards (uid,cash_billions) SELECT $1,cash_billions FROM career_rewards WHERE uid=$2
+      ON CONFLICT (uid) DO UPDATE SET cash_billions=GREATEST(career_rewards.cash_billions,EXCLUDED.cash_billions)`, [t, d]);
+    await c.query(`INSERT INTO assistant_purchases (uid,scope) SELECT $1,scope FROM assistant_purchases WHERE uid=$2
+      ON CONFLICT DO NOTHING`, [t, d]);
+    await c.query('UPDATE wallet_ops SET uid=$1 WHERE uid=$2', [t, d]);
+    await c.query('DELETE FROM assistant_purchases WHERE uid=$1', [d]);
+    await c.query('DELETE FROM career_rewards WHERE uid=$1', [d]);
+    await c.query('DELETE FROM wallets WHERE uid=$1', [d]);
     await c.query('COMMIT');
     return { ok: true, moved: !hasT };
   } catch (e) {

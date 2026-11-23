@@ -21,7 +21,7 @@ const initFor = (id, extra = {}) =>
 
 before(async () => {
   pool = makePool(url);
-  await pool.query('DROP TABLE IF EXISTS settings, wallet_ops, wallets, admin_log, online_results, online_games, online_seasons, link_codes, devices, events, saves, users, _migrations CASCADE');
+  await pool.query('DROP TABLE IF EXISTS settings, assistant_purchases, career_rewards, wallet_ops, wallets, admin_log, online_results, online_games, online_seasons, link_codes, devices, events, saves, users, _migrations CASCADE');
   await migrate(pool, { info() {} });
   app = buildApp({ pool, cfg, logger: false });
   await app.ready();
@@ -674,4 +674,45 @@ test('админка: сессия по ключу, бан/разбан, кош�
     r = await oapp.inject({ method: 'GET', url: `/api/online/${sid3}` });
     assert.equal(r.statusCode, 404, 'удалённый сезон не отдаётся');
   } finally { await oapp.close(); }
+});
+
+test('награды за кассу и помощник ГМ сохраняются с правильным сроком действия', async () => {
+  const auth = await app.inject({ method: 'POST', url: '/api/auth', payload: { initData: initFor(10001) } });
+  const headers = { authorization: 'Bearer ' + auth.json().token };
+  const careerId = crypto.randomUUID();
+  let ver = 0;
+  const saveCareer = async (cash, id = careerId, user = 0) => {
+    const response = await app.inject({
+      method: 'PUT', url: '/api/save?base=' + ver,
+      headers: { ...headers, 'content-type': 'application/octet-stream' },
+      payload: zlib.gzipSync(JSON.stringify({ v: 6, user, careerId: id, fin: { cash } })),
+    });
+    assert.equal(response.statusCode, 200, response.body);
+    ver = response.json().ver;
+  };
+  const read = async () => {
+    const response = await app.inject({ url: '/api/rewards', headers });
+    assert.equal(response.statusCode, 200, response.body);
+    return response.json();
+  };
+  const buy = id => app.inject({ method: 'POST', url: '/api/rewards/assistant', headers, payload: { careerId: id } });
+
+  await saveCareer(2_100_000);
+  const awarded = await read();
+  assert.equal(awarded.cashBillions, 2);
+  assert.equal(awarded.balance, 2 * awarded.cashReward);
+  await saveCareer(900_000, careerId, 1);
+  await saveCareer(2_000_000, careerId, 1);
+  assert.equal((await read()).balance, awarded.balance);
+
+  const results = await Promise.all([buy(careerId), buy(careerId)]);
+  for (const response of results) assert.equal(response.statusCode, 200, response.body);
+  await saveCareer(800_000, careerId, 2);
+  const bought = await read();
+  assert.equal(bought.balance, awarded.balance - awarded.assistantPrice);
+  assert.deepEqual(bought.purchases, ['career:' + careerId]);
+
+  await saveCareer(15_000, crypto.randomUUID());
+  assert.deepEqual((await read()).purchases, []);
+  assert.equal((await buy(careerId)).statusCode, 409);
 });
