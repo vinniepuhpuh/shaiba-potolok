@@ -222,9 +222,19 @@ async function userCard(id){
 }
 
 /* ---------- турниры ---------- */
-function renderSeasons(r){
+async function renderSeasons(r){
   cache.seasons=r.seasons||[];
-  shell(`<div class="card"><h2>Создать турнир</h2><div class="row">
+  let conv={enabled:false,template:'big'};
+  try{conv=await api('/api/admin/conveyor');}catch(e){}
+  shell(`<div class="card"><h2>Конвейер лиг</h2>
+  <div class="row">
+    <label class="mut"><input id="cvon" type="checkbox" ${conv.enabled?'checked':''}> автоматически создавать следующую лигу, когда нет открытых</label>
+    <select id="cvt"><option value="big" ${conv.template==='big'?'selected':''}>шаблон: большая лига (32 клуба)</option><option value="test8" ${conv.template==='test8'?'selected':''}>шаблон: тестовый (8 клубов)</option></select>
+    <button class="pri" id="cvs">Сохранить</button>
+    <button id="cvn" title="Создать конвейерную лигу сразу, вне правил">Создать лигу сейчас</button>
+  </div>
+  <p class="mut">Когда среди активных сезонов не остаётся ни одной открытой лиги, конвейер создаёт «Большую лигу №N» (боевую, в рейтинг). Пустая лига следующую не порождает.</p></div>
+  <div class="card"><h2>Создать турнир</h2><div class="row">
     <select id="ct"><option value="test8">Тестовый: 8 клубов</option><option value="big">Большая лига: 32 клуба</option></select>
     <input id="cn" placeholder="Название" style="flex:1;min-width:160px">
     <input id="cs" type="date" title="Дата старта (пусто — завтра)">
@@ -235,7 +245,7 @@ function renderSeasons(r){
   <div class="card"><h2>Все турниры<small>${cache.seasons.length}</small></h2>
   <table><tr><th>#</th><th>Название</th><th>Статус</th><th class="r">Люди/боты</th><th class="r">Клубов</th><th>День</th><th>Чемпион</th><th>Действия</th></tr>
   ${cache.seasons.map(s=>`<tr><td>${s.sid}</td>
-    <td><b>${esc(s.name)}</b>${s.test?' <span class="badge">тест</span>':''}${s.big?' <span class="badge">big</span>':''}</td>
+    <td><b>${esc(s.name)}</b>${s.conveyor?' <span class="badge good" title="создана конвейером">авто</span>':''}${s.test?' <span class="badge">тест</span>':''}${s.big?' <span class="badge">big</span>':''}</td>
     <td><span class="badge ${s.status==='active'?'good':''}">${STN[s.status]||s.status}</span></td>
     <td class="r">${s.humans} / ${s.bots}</td><td class="r">${s.clubs}</td><td>${s.day}</td>
     <td>${s.champName?esc(s.champName):(s.champ!=null?'№'+s.champ:'—')}</td>
@@ -247,6 +257,16 @@ function renderSeasons(r){
       <button class="sm danger" data-a="del" data-id="${s.sid}">Удалить</button>
     </td></tr>`).join('')||'<tr><td colspan="8" class="mut">Турниров нет.</td></tr>'}
   </table></div>`);
+  $('#cvs').onclick=async()=>{
+    try{await post('/api/admin/conveyor',{enabled:$('#cvon').checked,template:$('#cvt').value});alert('Сохранено');}
+    catch(e){alert(e.message);}
+  };
+  $('#cvn').onclick=async()=>{
+    if(!confirm('Создать конвейерную лигу сейчас (вне правил конвейера)?'))return;
+    try{const r=await post('/api/admin/conveyor',{enabled:$('#cvon').checked,template:$('#cvt').value,createNow:true});
+      alert('Создан сезон №'+(r.created&&r.created.id));cache={};load();}
+    catch(e){alert(e.message);}
+  };
   $('#cgo').onclick=async()=>{
     const body={template:$('#ct').value,name:$('#cn').value.trim(),test:$('#ctest').checked};
     if($('#cs').value)body.start=$('#cs').value;
