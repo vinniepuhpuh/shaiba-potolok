@@ -21,7 +21,7 @@ const initFor = (id, extra = {}) =>
 
 before(async () => {
   pool = makePool(url);
-  await pool.query('DROP TABLE IF EXISTS wallet_ops, wallets, admin_log, online_results, online_games, online_seasons, link_codes, devices, events, saves, users, _migrations CASCADE');
+  await pool.query('DROP TABLE IF EXISTS settings, wallet_ops, wallets, admin_log, online_results, online_games, online_seasons, link_codes, devices, events, saves, users, _migrations CASCADE');
   await migrate(pool, { info() {} });
   app = buildApp({ pool, cfg, logger: false });
   await app.ready();
