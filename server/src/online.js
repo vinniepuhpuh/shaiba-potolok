@@ -75,6 +75,7 @@ export function makeOnline(pool, htmlPath, log = console, opts = {}) {
       if (S.online.champ != null && !S.online.saved) await saveResults(rec);
     }
     log.info?.(`online: движок ${G.version}, активных сезонов: ${seasons.size}`);
+    try { await conveyorCheck(); } catch (e) { log.error?.(e, 'конвейер лиг при старте пропущен'); }
   }
   /** Число активных сезонов, где uid ведёт клуб (не бот). */
   function activeCount(uid, exceptSid = null) {
@@ -127,8 +128,61 @@ export function makeOnline(pool, htmlPath, log = console, opts = {}) {
         }
       }
       evict();
+      try { await conveyorCheck(now); } catch (e) { log.error?.(e, 'конвейер лиг пропущен'); }
       return played;
     });
+  }
+  /** Настройки конвейера из таблицы settings (дефолты: выключен, шаблон big). */
+  async function conveyorSettings() {
+    const rows = (await pool.query('SELECT key, value FROM settings')).rows;
+    let enabled = false, template = 'big';
+    for (const r of rows) {
+      if (r.key === 'conveyor.enabled') enabled = r.value === true || r.value === 'true';
+      if (r.key === 'conveyor.template') template = typeof r.value === 'string' ? r.value : 'big';
+    }
+    return { enabled, template: template === 'test8' ? 'test8' : 'big' };
+  }
+  /** Следующее имя конвейерной лиги: «Большая лига №N», N = max номер + 1 по именам в базе. */
+  async function nextConveyorName() {
+    const rows = (await pool.query("SELECT name FROM online_seasons WHERE name LIKE 'Большая лига №%'")).rows;
+    let n = 0;
+    for (const r of rows) { const m = String(r.name).match(/№(\d+)\s*$/); if (m) n = Math.max(n, +m[1]); }
+    return `Большая лига №${n + 1}`;
+  }
+  /** Донор наследования академии. Конвейерные лиги наследуют из последней конвейерной,
+   * ручные — из последнего сезона по id (прежнее поведение). Сюда потом лягут частные турниры. */
+  async function inheritDonor(conveyor) {
+    if (conveyor) {
+      const rows = (await pool.query(
+        `SELECT id FROM online_seasons WHERE (state->'online'->'cfg'->>'conveyor') = 'true' ORDER BY id DESC LIMIT 20`)).rows;
+      for (const r of rows) { const rec = await loadSeason(r.id); if (rec) return rec.S; }
+      return null;
+    }
+    const last = (await pool.query('SELECT id FROM online_seasons ORDER BY id DESC LIMIT 1')).rows[0];
+    if (!last) return null;
+    const rec = await loadSeason(last.id);
+    return rec ? rec.S : null;
+  }
+  /** Конвейер открытых лиг: если среди активных нет ни одной открытой — создать следующую (максимум одну).
+   * Новая лига не создаётся, если в предыдущей конвейерной не было живых игроков (пустая не плодит пустую). */
+  async function conveyorCheck(now = Date.now()) {
+    let open = 0;
+    for (const rec of seasons.values()) {
+      const o = rec.S.online;
+      if (o.champ != null) continue;
+      const humans = Object.values(o.humans).filter((h) => h && !h.bot).length;
+      if (now < o.deadlineT && humans < rec.S.teams.length) open++;
+    }
+    if (open > 0) return null; // открытая лига есть (правило заодно защищает от дублей: 2+ открытых → не создаём)
+    const st = await conveyorSettings();
+    if (!st.enabled) return null;
+    const last = (await pool.query(
+      `SELECT EXISTS (SELECT 1 FROM jsonb_each(state->'online'->'humans') e WHERE (e.value->>'bot') IS DISTINCT FROM 'true') AS had_humans
+       FROM online_seasons WHERE (state->'online'->'cfg'->>'conveyor') = 'true' AND status != 'archived'
+       ORDER BY id DESC LIMIT 1`)).rows[0];
+    if (last && !last.had_humans) return null; // предыдущая конвейерная осталась пустой
+    const name = await nextConveyorName();
+    return createLocked({ template: st.template, test: false, conveyor: true, name }, now);
   }
   /** Рейтинг менеджеров: топ-50, моё место и мои сезоны. По строкам всех сезонов — не ломать. */
   async function rating(uid) {
@@ -140,21 +194,21 @@ export function makeOnline(pool, htmlPath, log = console, opts = {}) {
     const pub = (u, k) => ({ pos: k + 1, name: u.name, pts: u.pts, seasons: u.seasons, champs: u.champs, awards: u.awards, me: u.uid === uid });
     return { top: all.slice(0, 50).map(pub), me: i >= 0 ? pub(all[i], i) : null, history: hist };
   }
+  // тело create(): выполняется только внутри очереди (или init до запуска сервера)
+  async function createLocked(cfgIn, now = Date.now()) {
+    const cfg = { ...(cfgIn || {}) };
+    if (cfg.template === 'big') cfg.big = true;
+    if (cfg.template == null) cfg.template = cfg.big ? 'big' : 'test8';
+    // наследование академии: конвейерные лиги — из последней конвейерной, ручные — из последней по id
+    const prev = await inheritDonor(!!cfg.conveyor);
+    const S = createSeason(G, cfg, now);
+    const inh = inheritAcademy(G, S, prev, now);
+    const r = await pool.query('INSERT INTO online_seasons (name, state) VALUES ($1,$2) RETURNING id', [S.online.cfg.name, JSON.stringify(S)]);
+    const rec = addSeason(r.rows[0].id, S);
+    return { id: rec.sid, slots: S.online.slots.length, first: S.online.slots[0].t, inherited: inh };
+  }
   async function create(cfgIn, now = Date.now()) {
-    return q(async () => {
-      const cfg = { ...(cfgIn || {}) };
-      if (cfg.template === 'big') cfg.big = true;
-      if (cfg.template == null) cfg.template = cfg.big ? 'big' : 'test8';
-      // наследование академии — из последнего по номеру сезона, параллельные сезоны не трогаем
-      let prev = null;
-      const last = (await pool.query('SELECT id FROM online_seasons ORDER BY id DESC LIMIT 1')).rows[0];
-      if (last) { const rec = await loadSeason(last.id); prev = rec ? rec.S : null; }
-      const S = createSeason(G, cfg, now);
-      const inh = inheritAcademy(G, S, prev, now);
-      const r = await pool.query('INSERT INTO online_seasons (name, state) VALUES ($1,$2) RETURNING id', [S.online.cfg.name, JSON.stringify(S)]);
-      const rec = addSeason(r.rows[0].id, S);
-      return { id: rec.sid, slots: S.online.slots.length, first: S.online.slots[0].t, inherited: inh };
-    });
+    return q(() => createLocked(cfgIn, now));
   }
   /** Последний активный открытый сезон — для старых клиентов без sid. */
   async function latestOpen(now = Date.now()) {
@@ -298,6 +352,7 @@ export function makeOnline(pool, htmlPath, log = console, opts = {}) {
               THEN (state->'teams'->((state->'online'->>'champ')::int))->>'name' END AS champ_name,
          state->'online'->'cfg'->>'test' AS test,
          state->'online'->'cfg'->>'big' AS big,
+         (state->'online'->'cfg'->>'conveyor') = 'true' AS conveyor,
          (state->'online'->'slots'->0->>'t')::double precision AS start,
          (SELECT count(*) FROM jsonb_array_elements(state->'teams'))::int AS clubs,
          (SELECT count(*) FROM jsonb_each(state->'online'->'humans') e WHERE (e.value->>'bot') IS DISTINCT FROM 'true')::int AS humans,
@@ -312,6 +367,7 @@ export function makeOnline(pool, htmlPath, log = console, opts = {}) {
       return {
         sid: r.id, name: r.name, status: o ? (o.champ != null ? 'finished' : 'active') : r.status,
         test: o ? !!o.cfg.test : r.test === 'true', big: o ? !!o.cfg.big : r.big === 'true',
+        conveyor: o ? !!o.cfg.conveyor : !!r.conveyor,
         clubs: o ? o.cfg.clubs.length : r.clubs, humans: o ? Object.values(o.humans).filter((h) => h && !h.bot).length : r.humans,
         bots: o ? Object.values(o.humans).filter((h) => h && h.bot).length : r.bots,
         start: o && o.slots[0] ? o.slots[0].t : r.start,
@@ -450,7 +506,7 @@ export function makeOnline(pool, htmlPath, log = console, opts = {}) {
     return staffView(G, rec.S, uid, now);
   }
   return { init, tick, create, view, join, touch, game, team, plan, lines, market, tradeEval, fin, rating, notify, academy, staff,
-    seasonsList, latestOpen, finishSeason, archiveSeason, deleteSeason, setHuman, dropUser, adminSeasons, userClubs,
+    seasonsList, latestOpen, finishSeason, archiveSeason, deleteSeason, setHuman, dropUser, adminSeasons, userClubs, conveyorCheck,
     prices: mut(setPrices), arena: mut((G_, S_, uid) => buyArena(G_, S_, uid)),
     bid: mut(bidFA), poachBid: mut(bidPoach), search: mut((G_, S_, uid, b, now) => acadSearch(G_, S_, uid, now)),
     take: mut(acadTake), promote: mut(acadPromote), upg: mut(buyUpg), match: mut(poachMatch), release: mut(releasePlayer),
