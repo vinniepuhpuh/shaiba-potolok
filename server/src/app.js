@@ -561,6 +561,34 @@ export function buildApp({ pool, cfg, logger = true, online = null }) {
     if (!needAdmin(req, reply)) return;
     return { log: (await pool.query('SELECT id, action, target, payload, ip, created_at FROM admin_log ORDER BY id DESC LIMIT 200')).rows };
   });
+  // конвейер открытых лиг: настройки и принудительное создание (для отладки)
+  app.get('/api/admin/conveyor', async (req, reply) => {
+    if (!needAdmin(req, reply)) return;
+    const rows = (await pool.query("SELECT key, value FROM settings WHERE key LIKE 'conveyor.%'")).rows;
+    let enabled = false, template = 'big';
+    for (const r of rows) {
+      if (r.key === 'conveyor.enabled') enabled = r.value === true;
+      if (r.key === 'conveyor.template') template = r.value === 'test8' ? 'test8' : 'big';
+    }
+    return { enabled, template };
+  });
+  app.post('/api/admin/conveyor', async (req, reply) => {
+    if (!needAdmin(req, reply)) return;
+    const b = req.body || {};
+    const enabled = !!b.enabled;
+    const template = b.template === 'test8' ? 'test8' : 'big';
+    await pool.query('INSERT INTO settings (key, value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value',
+      ['conveyor.enabled', JSON.stringify(enabled)]);
+    await pool.query('INSERT INTO settings (key, value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value',
+      ['conveyor.template', JSON.stringify(template)]);
+    let created = null;
+    if (b.createNow) {
+      if (!online) return reply.code(503).send({ error: 'online_disabled' });
+      created = await online.create({ template, test: false, conveyor: true });
+    }
+    await alog(req, 'conveyor_set', null, { enabled, template, createNow: !!b.createNow });
+    return { ok: true, enabled, template, created };
+  });
 
   // Вебхук бота: /bot/<BOT_WEBHOOK_PATH>
   if (cfg.botToken && cfg.webhookPath) {
