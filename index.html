@@ -84,6 +84,17 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center;justify-conten
 .trbar{position:sticky;bottom:calc(64px + env(safe-area-inset-bottom,0px));z-index:3}
 .trcap{display:flex;flex-wrap:wrap;gap:2px 12px;align-items:baseline;padding:8px 0;border-top:1px solid var(--line);font-size:13px}
 .trcap:first-of-type{border-top:0}.trcap>b{flex-basis:100%;font-size:14px}.trcap span b{font-family:var(--fm)}
+.reward-main{margin-top:12px;display:flex;justify-content:center}
+.reward-chip{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;padding:4px 9px;flex:none;border:1px solid #806b4a;border-radius:20px;background:#253348;color:#ffda92;font:inherit;font-size:13px;font-weight:700;white-space:nowrap}
+button.reward-chip{cursor:pointer}
+.reward-puck{display:inline-block;width:18px;height:11px;flex:none;border:1.5px solid #ecc379;border-radius:50%;background:#232936;box-shadow:0 2px #bd8b4e,inset 0 1px #52637a;transform:rotate(-16deg)}
+.reward-list ul{list-style:none;padding:0;margin:0 0 12px}
+.reward-row{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid color-mix(in srgb,currentColor 16%,transparent)}
+.reward-patch{display:grid;place-items:center;width:36px;height:42px;padding-bottom:5px;flex:none;background:#253c53;color:#f1cc86;clip-path:polygon(0 0,100% 0,100% 76%,50% 100%,0 76%);font-size:19px}
+.reward-patch.ok{color:#91e6b8}
+.reward-detail{display:grid;gap:3px;flex:1;min-width:0}
+.reward-detail progress{width:100%;height:7px;accent-color:#d9a855}
+.reward-gain{flex:none;white-space:nowrap;font-size:12px;font-weight:700;color:inherit}
 </style>
 <style>
 /* Layout: one-column phone app. Scoreboard header on top, scrolling content, tab bar pinned to the bottom. */
@@ -2046,8 +2057,8 @@ const canExtend=p=>p&&p.team===S.user&&S.phase==='regular'&&!p.next&&!p.temp&&!p
 function doExtend(id){
   const p=P(id);if(!canExtend(p))return;
   p.next={sal:rs(fair(p.ovr)*.9),yrs:p.age>=31?ri(1,3):p.age>=28?ri(2,4):ri(3,4)};
-  news(`Досрочно продлили контракт с ${full(p)}: с сезона ${seasonLbl(S.season+1)} ${money(p.next.sal)} × ${p.next.yrs}. Текущий контракт доигрывается на старых условиях.`);
-  U.sheet=null;toast('Контракт продлён со следующего сезона.');sfx('sign');inv();
+  news(`Досрочно продлили контракт с ${full(p)}: после окончания текущего договора — ${money(p.next.sal)} × ${p.next.yrs}.`);
+  U.sheet=null;toast('Продление вступит в силу после текущего контракта.');sfx('sign');inv();
 }
 function resetTrade(tid){U.trade={tid,give:[],get:[],giveP:[],getP:[]};}
 function tradeEval(){
@@ -2108,7 +2119,7 @@ function load(){try{const s=localStorage.getItem(KEY);if(s){const o=JSON.parse(s
 
 /* ---------- changelog ---------- */
 const CHANGES=[
-  {v:'2026-11-23a',d:'23 ноября',t:'Тренеры, продления и жёсткие обмены в карьере',items:['Главный тренер в каждом клубе: один любимый стиль (×1.2 к соответствию состава), два хороших (×1.1). Стартовый тренер подобран под состав, свободных специалистов можно нанимать, не больше двух замен за сезон.','Тренер по физподготовке: режим «форма» — временная сила состава до +3, «развитие» — рост молодых к потенциалу до ×1.5, но сила проседает. Шкала ±8 за игровой день, у ботов точное значение скрыто — виден только 🔥 у команд в ударе.','Досрочное продление: контракты с 1–2 годами до конца можно продлить по ходу сезона со скидкой ~10% к справедливой цене — новый контракт начнётся со следующего сезона, текущий доигрывается на старых условиях. Боты тоже продлевают своих растущих игроков.','Обмены стали жёстче: боты соглашаются на сделки только с выгодой ~25–35% (прагматик жёстче всех, шоумен и торговец мягче). Звёзды 90+ дорожают квадратично к 99, средние игроки подешевели, пики топ-10 стоят заметно дороже, ценность молодых проспектов дисконтируется за неопределённость.','Защитники в фильтрах агентов и поиска разделены на левых и правых (ЛЗ/ПЗ).','Прогноз лотереи показывает владельца пика каждой позиции: обменянные выборы видно сразу.']},
+  {v:'2026-11-23a',d:'23 ноября',t:'Тренеры, продления и жёсткие обмены в карьере',items:['Главный тренер в каждом клубе: один любимый стиль (×1.2 к соответствию состава), два хороших (×1.1). Стартовый тренер подобран под состав, свободных специалистов можно нанимать, не больше двух замен за сезон.','Тренер по физподготовке: режим «форма» — временная сила состава до +3, «развитие» — рост молодых к потенциалу до ×1.5, но сила проседает. Шкала ±8 за игровой день, у ботов точное значение скрыто — виден только 🔥 у команд в ударе.','Досрочное продление: контракты с 1–2 годами до конца можно продлить по ходу сезона со скидкой ~10% к справедливой цене — новый контракт вступит в силу после окончания текущего. Боты тоже продлевают своих растущих игроков.','Обмены стали жёстче: требуемая выгода бота зависит от профиля ГМ (прагматик жёстче всех, шоумен и торговец мягче). Звёзды 90+ дорожают квадратично к 99, средние игроки подешевели, пики топ-10 стоят заметно дороже, ценность молодых проспектов дисконтируется за неопределённость.','Защитники в фильтрах агентов и поиска разделены на левых и правых (ЛЗ/ПЗ).','Прогноз лотереи показывает владельца пика каждой позиции: обменянные выборы видно сразу.']},
   {v:'2026-11-21b',d:'21 ноября',t:'Игровой никнейм',items:['При первом входе игра предложит выбрать никнейм — именно его увидят соперники в онлайн-лиге вместо имени из Telegram.','Никнейм можно поменять в любой момент: карточка аккаунта на главном экране → «Сменить имя».']},
   {v:'2026-11-21a',d:'21 ноября',t:'Мои турниры',items:['Онлайн-лига стала мультисезонной: параллельно может идти несколько турниров, и можно играть сразу в нескольких — до трёх одновременно.','Экран «Мои турниры» — новая точка входа в онлайн: ваши сезоны с местом и следующим матчем (у идущих матчей плашка LIVE), открытые лиги с кнопкой «Вступить» и завершённые с чемпионами.','Кнопка со стрелкой в шапке турнира возвращает к списку лиг.','Напоминания бота о матчах подписаны именем турнира, а кнопка «К матчу» открывает нужную лигу сразу.']},
   {v:'2026-11-20c',d:'20 ноября',t:'Тренеры, спонсоры и большая лига',items:['Главный тренер: у каждого профиль стилей — один любимый (стиль даёт ещё +20%), два хороших (+10%), остальные без бонуса. Стартовый тренер подобран под состав клуба.','Рынок тренеров: главного можно сменить на свободного специалиста, но не больше двух замен за сезон.','Тренер по физподготовке: переключатель «основа / академия». Работа с основой со временем даёт до +3 к силе состава и ускоряет рост игроков к потенциалу; переключитесь на академию — шкала основы падает, зато воспитанники растут быстрее. Шкала обновляется каждый игровой день.','Клуб, набравший хорошую форму, отмечен значком 🔥 рядом с названием — точное значение шкалы соперникам не видно.','Титульный спонсор: три контракта на выбор. Больше денег — жёстче требования к месту в таблице и плей-офф; скромнее деньги — больше очков рейтинга. Выплаты каждую неделю сезона, бонус — по итогам.','Большая лига: 32 клуба в двух конференциях, 82 матча регулярного чемпионата (26 с соперниками по дивизиону, 24 по конференции, 32 межконференционных), плей-офф по 8 клубов от конференции, финал — между чемпионами конференций.']},
@@ -2179,28 +2190,31 @@ const TOUR=[
   {t:null,title:'Добро пожаловать, генеральный менеджер!',text:'Вы управляете хоккейным клубом: собираете состав, подписываете контракты, меняетесь с другими клубами и следите за деньгами. Матчи играют сами, ваша работа — решения. Покажу главное за минуту.',first:true},
   {tab:'club',t:'cap',title:'Потолок зарплат',text:'Главное правило лиги: сумма зарплат всех игроков не может быть больше потолка. Полоса показывает, сколько уже потрачено. «Свободно» — сколько ещё можно добавить. «Касса» — деньги клуба на улучшения и разовые траты, это другое.'},
   {tab:'club',t:'match',title:'Матчи',text:'«Смотреть матч» — трансляция на схеме площадки, около 4 минут, с перемоткой. «Сыграть быстро» — сразу результат. Кнопки ниже проматывают сразу несколько дней. За сезон 82 матча, лучшие 8 команд конференции выходят в плей-офф.'},
-  {tab:'club',t:'tactic',title:'Тактика',text:'Выберите стиль игры. Каждый стиль бьёт один и уступает другому: Форчекинг бьёт Владение, Владение — Ловушку, Ловушка — Контратаку, Контратака — Форчекинг. Чем лучше стиль подходит вашим игрокам, тем сильнее эффект. Любимый стиль соперника показан здесь же. «Авто» подбирает стиль под ваш состав, но не под соперника.'},
+  {tab:'club',t:'tactic',title:'Тактика и помощник ГМ',text:'Выберите стиль и риск перед матчем. Начните с «Баланса», если соперник часто меняет стиль. Значок «i» объясняет, какие стили друг друга бьют. За валюту аккаунта можно нанять помощника: он предложит план по составам и последним матчам соперника. В карьере помощник переходит вместе с вами в другой клуб.'},
+  {tab:'club',t:'staff',title:'Тренерский штаб',text:'Главный тренер усиливает любимый и два знакомых стиля. Тренер по физподготовке постепенно поднимает силу основы в режиме «Форма» или ускоряет рост молодых в режиме «Развитие» ценой текущей формы. Можно заменить двух специалистов за сезон. В плей-офф найм закрыт.'},
   {tab:'fin',t:'owner',title:'Владелец и его цель',text:'Каждый сезон владелец ставит цель: выйти в плей-офф, пройти раунд или набрать очки. Выполнили — доверие растёт, провалили — падает. Первые 2 сезона он прощает ошибки вдвое легче, так что можно учиться.'},
   {tab:'fin',t:'spon',title:'Спонсоры — первое дело',text:'Спонсоры приносят деньги каждый день сезона. Сейчас слоты пустые: после обучения выберите предложения здесь. Не уверены — берите «Стабильный».'},
   {tab:'roster',t:'rs-seg',title:'Состав и позиции',text:'Во вкладке «Игроки» весь ваш состав. У каждого своя позиция: Ц, ЛН, ПН, а защитники — левые (ЛЗ) и правые (ПЗ). Значок вроде «ЛН/Ц» значит, что игрок без штрафа играет и там, и там. В «Звеньях» вы ставите игроков в тройки и пары или жмёте автосборку: «Сильнейшие», «Связки ролей» или «Сохранить сыгранность».'},
   {tab:'market',mk:'fa',t:'mk-seg',title:'Рынок',text:'Здесь усиливают команду: «Агенты» — игроки без клуба, их можно подписать сразу. «Поиск» — игроки других клубов. «Обмены» — меняться с клубами. «Драфт» — молодые таланты.'},
   {tab:'market',mk:'fa',t:'fa',title:'Как подписать игрока',text:'Нажмите на игрока и «Предложить контракт». Предложите сумму близко к запросу — шанс высокий. Слишком мало — игрок теряет терпение и может прекратить переговоры.'},
+  {tab:'market',mk:'trade',t:'trade-team',title:'С чего начать обмен',text:'Выберите клуб. Его блок обменов покажет игроков и пики, которые он готов обсуждать, а также нужные позиции и тип усиления. Отметьте активы, затем проверьте интерес партнёра и место под потолком.'},
   {t:null,title:'Ваш первый ход',text:'1. Выберите спонсоров во вкладке «Финансы».\n2. Вернитесь в «Клуб» и сыграйте первый матч.\n3. Если состав слабый — загляните на «Рынок».\nПо ходу игры я буду подсказывать про новые возможности. В меню «⋯» — обучение заново, словарь терминов, «Что нового» и звук.',last:true}
 ];
 const HINTS={
   live2:['Трансляция матча','Кружки с номерами — игроки, чёрная точка — шайба. После гола всплывает, кто забил и кто отдал передачи. Скорость и перемотка под площадкой, в перерывах можно сменить тактику и звенья. Звуки и музыку можно выключить в меню «⋯».'],
   offer:['Переговоры','Шанс согласия зависит от суммы и срока. Каждый отказ снижает терпение игрока. Бонус агенту платится из кассы и возвращает терпение. Своим игрокам можно дать до 8 лет, чужим до 7.'],
   lines2:['Звенья и позиции','Первое звено играет больше всех. Ставьте игроков на их позицию или вторую позицию (ЛН/Ц): там штрафа нет. На чужой позиции −6, защитник не на своей стороне −3. Связка ролей (снайпер + плеймейкер + двусторонний) сразу даёт бонус, а сыгранность растёт, пока звено играет вместе. Не хотите возиться — три кнопки автосборки, все расставляют строго по позициям.'],
-  trade:['Обмены','Выберите клуб, отметьте, кого отдаёте и кого хотите получить. Шкала покажет, интересна ли сделка. Каждый ГМ оценивает игроков по-своему: «Строитель» любит молодых, «Олигарх» — опытных.'],
+  trade:['Обмены','Начните с блока обменов выбранного клуба и проверьте шкалу интереса. Требования зависят от профиля ГМ. Молодые звёзды и ранние пики особенно дороги, а средний игрок редко перекроет их стоимость один.'],
+  growth:['Рост и контракты','Рейтинг прибавляется или снижается по ходу регулярки. Молодым помогают игровая практика, тренировочная база и режим «Развитие». Потенциал остаётся фиксированным. Если осталось 1–2 года контракта, откройте карточку игрока и выберите «Продлить заранее». Новый договор вступит в силу после окончания текущего.'],
   off:['Межсезонье','Сезон окончен. Сначала продлите контракты своих игроков: у вас приоритет. Потом драфт новичков, потом 7 дней рынка свободных агентов. Когда будете готовы — «Начать сезон».'],
-  draft:['Драфт','Каждый клуб по очереди выбирает молодых игроков. Скауты оценивают их приблизительно. Выбранные не занимают место в составе: подпишите их, когда подрастут, в «Состав» → «Права».'],
+  draft:['Драфт','В прогнозе лотереи место и шанс относятся к исходному клубу, а колонка «Выбор» показывает, у кого сейчас его пик. Оценки проспектов приблизительные. Драфтованных можно подписать через «Состав» → «Права».'],
   fa:['Рынок свободных агентов','7 дней торгов. В конце каждого дня другие клубы забирают часть игроков, сильнейших — в первые дни. С 3-го дня цены падают: ждать выгодно, но рискованно.'],
-  fin:['Финансы','Доходы: билеты, джерси, ТВ, спонсоры. Расходы: зарплаты и содержание. Лишние деньги вкладывайте в улучшения: арена, тренировочная база, медштаб, скауты.']
+  fin:['Финансы','Касса клуба пополняется билетами, джерси, ТВ и спонсорами. Из неё платятся зарплаты и улучшения. Каждый новый миллиард, достигнутый в текущей кассе, один раз даёт награду на аккаунт после синхронизации. Нажмите на шайбу в шапке, чтобы открыть достижения и посмотреть баланс.']
 };
 const GLOSS=[
   ['Потолок зарплат','Максимальная сумма зарплат всех игроков клуба. Растёт на 2.5% каждый сезон.'],
   ['Касса','Деньги клуба. Тратятся на улучшения, сборы, лагеря, бонусы агентам. Зарплаты списываются отсюда же по ходу сезона.'],
-  ['Рейтинг и потенциал','Рейтинг — текущая сила игрока. Потенциал — до чего он может вырасти. Молодые растут, после 33 лет начинается спад.'],
+  ['Рейтинг и потенциал','Рейтинг — текущая сила, он меняется по ходу регулярки. Потенциал — фиксированный потолок роста в карьере. У ветеранов с 33 лет начинается возрастной спад.'],
   ['Позиции','Ц — центральный, ЛН и ПН — крайние нападающие, ЛЗ и ПЗ — левый и правый защитник, В — вратарь. «ЛН/Ц» — у игрока две позиции, на обеих он играет без штрафа.'],
   ['Стиль игры','Форчекинг, Владение, Ловушка, Контратака или Баланс. Каждый стиль бьёт один и уступает другому, это до 10% к шансу победы. «Подходит» — насколько роли и рейтинг ваших игроков подходят стилю.'],
   ['Риск','Пять ступеней от «Осторожно» до «Ва-банк». Осторожная игра — меньше голов с обеих сторон, выгодна слабому. Ва-банк — больше голов, выгоден сильному.'],
@@ -2429,7 +2443,7 @@ function header(){
   const t=T(S.user),pay=payroll(S.user),dead=deadSum(),room=S.cap-pay;
   const rec=gp(t)?`${t.w}-${t.l}-${t.ot} · ${pts(t)} оч.`:'';
   const ph=S.phase==='regular'?`День ${Math.min(S.day+1,DAYS)}/${DAYS}`:S.phase==='playoffs'?'Плей-офф':S.phase==='done'?'Сезон завершён':S.off&&S.off.step==='fa'?`Рынок, день ${Math.min(S.off.day,FA_DAYS)}/${FA_DAYS}`:'Межсезонье';
-  return `<header class="top gut"><div class="top-row">${badge(t,44)}<div class="top-name"><h1>${t.city} ${t.name}</h1><small>${seasonLbl()} · ${ph}${rec?' · '+rec:''}</small></div><button class="icon-btn" data-a="mGo" data-id="menu" aria-label="Главное меню">${HOME_IC}</button><button class="icon-btn" data-a="menu" aria-label="Меню">${ICON.menu}</button></div>
+  return `<header class="top gut"><div class="top-row">${badge(t,44)}<div class="top-name"><h1>${t.city} ${t.name}</h1><small>${seasonLbl()} · ${ph}${rec?' · '+rec:''}</small></div>${rewardsButton()}<button class="icon-btn" data-a="mGo" data-id="menu" aria-label="Главное меню">${HOME_IC}</button><button class="icon-btn" data-a="menu" aria-label="Меню">${ICON.menu}</button></div>
   <div class="cap" data-tut="cap"><div class="cap-bar"><i style="width:${clamp((pay-dead)/S.cap,0,1)*100}%;background:var(--board-ink)"></i><i style="width:${clamp(dead/S.cap,0,1)*100}%;background:var(--red)"></i></div>
   <div class="cap-lbl"><span>Зарплаты <b>${money(pay)}</b> / ${money(S.cap)}</span><span>Свободно <b style="${room<0?'color:var(--red)':''}">${money(room)}</b></span><span>Касса <b style="${S.fin.cash<0?'color:var(--red)':''}">${money(S.fin.cash)}</b></span></div></div></header>`;
 }
@@ -2599,7 +2613,7 @@ function viewRoster(){
   const r=active(S.user).concat(roster(S.user).filter(p=>p.exp));
   const groups=[['Центральные','C'],['Левые нападающие','LW'],['Правые нападающие','RW'],['Защитники','D'],['Вратари','G']];
   const avg=r.length?(sum(r,p=>p.age)/r.length).toFixed(1):'–';
-  const out=seg+`<section class="card"><div class="kv"><div><small>Игроков</small><b>${rcount(S.user)}/${MAX_ROSTER}</b></div><div><small>Ср. возраст</small><b>${avg}</b></div><div><small>Свободно</small><b>${money(S.cap-payroll(S.user))}</b></div></div></section>
+  const out=seg+hint('growth')+`<section class="card"><div class="kv"><div><small>Игроков</small><b>${rcount(S.user)}/${MAX_ROSTER}</b></div><div><small>Ср. возраст</small><b>${avg}</b></div><div><small>Свободно</small><b>${money(S.cap-payroll(S.user))}</b></div></div></section>
   <section class="card"><h2>Состав<span>рейтинг · контракт</span></h2><div class="list">${groups.map(([n,k])=>{const g=r.filter(p=>p.pos===k).sort(byOvr);return `<div class="grp"><span>${n}</span><span>${g.length}</span></div>${g.map(p=>pRow(p)).join('')}`;}).join('')}</div>
   <p class="small muted">«Запас» не выходит на лёд: молодым без игрового времени рост даётся вдвое медленнее. Травмированные и игроки в лагере развития временно убираются из звеньев. Игроки с травмой больше 20 матчей не считаются под потолком в регулярке.</p></section>`;
   _inLines=null;return out;
@@ -2678,7 +2692,7 @@ function viewMarket(){
     <section class="card"><h2>Вы отдаёте<span>${tr.give.length+tr.giveP.length}</span></h2><div class="list">${mine.map(p=>pRow(p,{act:'tgGive',sel:tr.give.includes(p.id)})).join('')}${myP.length?`<div class="grp"><span>Ваши пики</span><span>${myP.length}</span></div>`+myP.map(k=>pkRow(k,'tgGiveP',tr.giveP.includes(k.id))).join(''):''}</div></section>
     <section class="card"><h2>Вы получаете<span>${t.ab} · свободно ${money(S.cap-payroll(t.id))}</span></h2><div class="list">${theirs.map(p=>pRow(p,{act:'tgGet',sel:tr.get.includes(p.id)})).join('')}${thP.length?`<div class="grp"><span>Их пики</span><span>${thP.length}</span></div>`+thP.map(k=>pkRow(k,'tgGetP',tr.getP.includes(k.id))).join(''):''}</div></section>`;
   }
-  return seg+hint('trade')+`<section class="card"><h2>Партнёр по обмену</h2><select id="tradeTeam" aria-label="Клуб для обмена"><option value="">Выберите клуб</option>${opts}</select></section>`+body;
+  return seg+hint('trade')+`<section class="card" data-tut="trade-team"><h2>Партнёр по обмену</h2><select id="tradeTeam" aria-label="Клуб для обмена"><option value="">Выберите клуб</option>${opts}</select></section>`+body;
 }
 function viewSearch(){
   const f=U.f;
@@ -2874,7 +2888,7 @@ function sheetPlayer(p){
   const status=p.inj?`<p class="small bad">Травма (${injSev(p.inj)})${p.inj<999?`: пропустит ещё ${games(p.inj)}`:''}.${p.ltir&&S.phase==='regular'?' Зарплата сейчас не считается под потолком.':''}</p>`:p.camp?`<p class="small ok">В лагере развития ещё ${p.camp} дн.</p>`:p.temp?`<p class="small">Временный контракт вместо ${nm(P(p.temp)||{f:'?',l:'?'})}: закончится, когда тот вернётся.</p>`:'';
   return `<div class="stack">${back}<div style="display:flex;gap:14px;align-items:center">${t?badge(t,48):''}<div style="flex:1;min-width:0"><h3>${full(p)}</h3><p class="sub">${sub}</p></div><div style="text-align:center"><div class="big-ovr num">${p.ovr}</div><small class="muted">рейтинг</small></div></div>
   ${role}${status}
-  ${p.next?`<p class="small ok">Продлён заранее: с сезона ${seasonLbl(S.season+1)} ${money(p.next.sal)} × ${p.next.yrs}. Текущий контракт доигрывается до конца.</p>`:canExtend(p)?`<p class="small muted">До конца контракта ${p.yrs} ${yw(p.yrs)}: можно продлить заранее — новый контракт начнётся со следующего сезона.</p>`:''}
+  ${p.next?`<p class="small ok">Продлён заранее: ${money(p.next.sal)} × ${p.next.yrs} после окончания текущего договора.</p>`:canExtend(p)?`<p class="small muted">До конца контракта ${p.yrs} ${yw(p.yrs)}. Можно продлить заранее, новые условия вступят в силу после окончания действующего контракта.</p>`:''}
   <div class="kv"><div><small>${c1[0]}</small><b>${c1[1]}</b></div><div><small>${c2[0]}</small><b>${c2[1]}</b></div><div><small>Потенциал</small><b>${os?potTxt(p):p.pot+' '+grade(p.pot)}</b></div></div>
   ${p.pos!=='G'?`<div class="kv"><div><small>Игры</small><b>${p.gp}</b></div><div><small>Голы (бол.)</small><b>${p.g} (${p.ppg})</b></div><div><small>Передачи · Штр</small><b>${p.a} · ${p.pim}</b></div></div>`:`<div class="kv two"><div><small>Игры</small><b>${p.gp}</b></div><div><small>% отражённых</small><b>${p.gsa?((p.gsa-p.gga)/p.gsa).toFixed(3).replace(/^0/,''):'—'}</b></div></div>`}
   ${fa?`<div class="factors small"><span>Терпение в переговорах</span><b>${patOf(p)}/100</b><span>Интерес других клубов</span><b>${it.length?it.slice(0,5).map(x=>tl(x,18)).join(' ')+(it.length>5?` +${it.length-5}`:''):'нет'}</b></div>${it.length>=3&&p.ovr>=72?'<p class="small warn">Скоро подпишет: за ним следят несколько клубов.</p>':''}`:''}
@@ -2984,6 +2998,7 @@ function renderBanned(){
 }
 function render(){
   if(CL.banned)return renderBanned();
+  if(U.rewards)return renderRewards();
   if(U.mode==='menu'){renderMain();return;}
   if(U.mode==='online'){renderOnline();return;}
   inv();
@@ -2992,7 +3007,7 @@ function render(){
   let html;
   if(S.user==null)html=viewPick();
   else{
-    const v={club:viewClub,roster:viewRoster,market:viewMarket,fin:()=>viewFin()+careerRewardsHTML(),league:viewLeague}[U.tab]();
+    const v={club:viewClub,roster:viewRoster,market:viewMarket,fin:viewFin,league:viewLeague}[U.tab]();
     html=header()+`<main class="gut">${v}</main>`+tabs();
   }
   if(U.sheet){
@@ -3177,11 +3192,11 @@ function tgInit(){
   try{TG.disableVerticalSwipes&&TG.disableVerticalSwipes();}catch(e){}
   try{TG.setHeaderColor&&TG.setHeaderColor('#0e1c2b');TG.setBackgroundColor&&TG.setBackgroundColor(TG.colorScheme==='dark'?'#0b131c':'#e8eef3');}catch(e){}
   try{document.documentElement.dataset.theme=TG.colorScheme==='dark'?'dark':'light';TG.onEvent&&TG.onEvent('themeChanged',()=>{document.documentElement.dataset.theme=TG.colorScheme==='dark'?'dark':'light';});}catch(e){}
-  try{TG.BackButton.onClick(()=>{if(U.sheet){act('close');}else if(U.mode==='online'){if(U.tour)act('oTSkip');else if(OL.gm)act('oClose');else if(OL.tab!=='home')act('oTab','home');else mGo('menu');}else if(U.mode==='career'){if(U.tour)act('tourSkip');else if(S.user!=null&&!S.live&&U.tab!=='club')act('tab','club');else if(!S.live)mGo('menu');}});}catch(e){}
+  try{TG.BackButton.onClick(()=>{if(U.rewards){act('rewardsClose');}else if(U.sheet){act('close');}else if(U.mode==='online'){if(U.tour)act('oTSkip');else if(OL.gm)act('oClose');else if(OL.tab!=='home')act('oTab','home');else mGo('menu');}else if(U.mode==='career'){if(U.tour)act('tourSkip');else if(S.user!=null&&!S.live&&U.tab!=='club')act('tab','club');else if(!S.live)mGo('menu');}});}catch(e){}
 }
 function tgSync(){
   if(!TG)return;
-  try{const show=!!U.sheet||U.mode==='online'||(U.mode==='career'&&!S.live);show?TG.BackButton.show():TG.BackButton.hide();}catch(e){}
+  try{const show=!!U.rewards||!!U.sheet||U.mode==='online'||(U.mode==='career'&&!S.live);show?TG.BackButton.show():TG.BackButton.hide();}catch(e){}
 }
 const tgHaptic=k=>{try{TG&&TG.HapticFeedback&&(k==='goal'?TG.HapticFeedback.notificationOccurred('success'):TG.HapticFeedback.impactOccurred('light'));}catch(e){}};
 /* ---------- cloud saves & stats (server) ---------- */
@@ -3232,7 +3247,7 @@ function appInit(){
   if(!CAP)return;
   document.documentElement.classList.add('native');
   const A=CapP('App');if(!A)return;
-  try{A.addListener('backButton',()=>{
+  try{A.addListener('backButton',()=>{if(U.rewards){act('rewardsClose');return;}
     if(U.mode==='menu'){if(U.sheet){act('close');return;}A.minimizeApp?A.minimizeApp():A.exitApp();return;}
     if(U.mode==='online'){if(U.tour){act('oTSkip');return;}if(OL.gm){act('oClose');return;}if(U.sheet){act('close');return;}if(OL.tab!=='home'){act('oTab','home');return;}mGo('menu');return;}
     if(U.tour){act('tourSkip');return;}
@@ -3252,6 +3267,13 @@ async function apiF(path,opt,ms){
 }
 let rewardState=null, rewardBusy=false, rewardRequest=0;
 const walletView=()=>rewardState&&rewardState.uid===CL.uid?rewardState.view:null;
+const puckAmount=n=>`${n} ${n%100>=11&&n%100<=14?'шайб':n%10===1?'шайба':n%10>=2&&n%10<=4?'шайбы':'шайб'}`;
+const PUCK_ICON='<span class="reward-puck" aria-hidden="true"></span>';
+function rewardsButton(){
+  const wallet=walletView();
+  const label=wallet?puckAmount(wallet.balance):'Достижения и награды';
+  return `<button class="reward-chip" data-a="rewardsOpen" aria-label="Открыть достижения и награды${wallet?', баланс '+label:''}">${PUCK_ICON}<span>${wallet?wallet.balance:'Награды'}</span></button>`;
+}
 const ownsAssistant=mode=>!!walletView()?.purchases.includes(mode==='career'?'career:'+S.careerId:'online:'+OL.sid);
 async function refreshRewards(){
   if(!CL.token)return;
@@ -3277,18 +3299,35 @@ function assistantHTML(mode,plan){
   if(!cloudable())return '';
   const wallet=walletView();
   if(!wallet)return '<button class="btn sm" data-a="rewardRefresh">Показать помощника ГМ</button>';
-  if(!ownsAssistant(mode))return `<button class="btn sm" data-a="assistantBuy" data-id="${mode}" ${rewardBusy||wallet.balance<wallet.assistantPrice?'disabled':''}>Нанять помощника ГМ · ${wallet.assistantPrice} монет</button><small class="muted"> Баланс: ${wallet.balance}</small>`;
+  if(!ownsAssistant(mode))return `<button class="btn sm" data-a="assistantBuy" data-id="${mode}" ${rewardBusy||wallet.balance<wallet.assistantPrice?'disabled':''}>Нанять помощника ГМ · ${puckAmount(wallet.assistantPrice)}</button><small class="muted"> Баланс: ${puckAmount(wallet.balance)}</small>`;
   if(!plan)return '<p class="small muted">Помощник ГМ нанят. Выберите конкретный матч для рекомендации.</p>';
   return `<p class="small"><b>Помощник ГМ</b> · ${STY[plan.sty].n}, ${RISKN[plan.risk].toLowerCase()}. ${plan.matches?`Учтено матчей соперника: ${plan.matches}.`:'Учтена сила обоих составов.'}</p>
     <button class="btn sm" data-a="assistantApply" data-id="${mode}">Применить план</button>`;
 }
-function careerRewardsHTML(){
-  if(!cloudable())return '';
+function rewardsPage(){
   const wallet=walletView();
-  return `<section class="card"><h2>Достижения за кассу клуба</h2>${wallet?
-    `<p class="small">Баланс: <b>${wallet.balance} монет</b> · достигнуто: <b>$${wallet.cashBillions} млрд</b></p>
-    <p class="small muted">Следующий порог — $${wallet.cashBillions+1} млрд в кассе. Награда — ${wallet.cashReward} монет при синхронизации карьеры.</p>`:
-    '<button class="btn sm" data-a="rewardRefresh">Обновить баланс</button>'}</section>`;
+  const reached=wallet?.cashBillions||0,cash=S.user==null?0:Math.max(0,S.fin.cash);
+  const first=Math.max(1,reached);
+  const rows=[first,first+1,first+2].map(billions=>{
+    const done=wallet&&billions<=reached,goal=billions*1_000_000;
+    const next=billions===reached+1,width=Math.min(100,100*cash/goal);
+    const detail=done?'Получено':next&&S.user!=null?`${money(cash)} из $${billions} млрд`:`$${billions} млрд в кассе`;
+    const progress=!done&&next&&S.user!=null?`<progress aria-label="Прогресс цели" max="100" value="${width}"></progress>`:'';
+    return `<li class="reward-row"><span class="reward-patch ${done?'ok':''}" aria-hidden="true">${done?'✓':'▥'}</span>
+      <div class="reward-detail"><b>${billions===1?'Первый миллиард':`Касса клуба · $${billions} млрд`}</b>
+      <small class="${done?'ok':'muted'}">${detail}</small>${progress}</div>
+      ${wallet?`<span class="reward-gain">+${puckAmount(wallet.cashReward)}</span>`:''}</li>`;
+  }).join('');
+  return `<header class="top gut"><div class="top-row"><button class="icon-btn" data-a="rewardsClose" aria-label="Назад">←</button>
+    <div class="top-name"><h1>Достижения и награды</h1></div>${wallet?`<span class="reward-chip">${PUCK_ICON}${puckAmount(wallet.balance)}</span>`:''}</div></header>
+    <main class="gut"><section class="card reward-list"><h2>Касса клуба</h2><ul>${rows}</ul>
+    ${wallet?'<p class="small muted">Каждый порог приносит награду один раз. Шайбы зачисляются при синхронизации карьеры.</p>':
+      cloudable()?'<button class="btn sm" data-a="rewardRefresh">Загрузить баланс</button>':'<p class="small muted">Баланс шайб доступен в приложении и в Telegram.</p>'}</section></main>`;
+}
+function renderRewards(){
+  const app=document.getElementById('app');
+  app.innerHTML=rewardsPage()+(U.toast?`<div class="toast" role="status">${U.toast}</div>`:'');
+  document.body.style.overflow='';tgSync();
 }
 async function purchaseAssistant(mode){
   if(rewardBusy)return;
@@ -3305,7 +3344,7 @@ async function purchaseAssistant(mode){
     const payload=mode==='career'?{careerId:S.careerId}:{seasonId};
     const r=await apiF('/api/rewards/assistant',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const view=await r.json();
-    if(!r.ok)throw new Error(view.error==='insufficient_balance'?'Недостаточно монет.':'Покупка сейчас недоступна.');
+    if(!r.ok)throw new Error(view.error==='insufficient_balance'?'Недостаточно шайб.':'Покупка сейчас недоступна.');
     rewardRequest++;
     rewardState={uid:CL.uid,view};
     toast('Помощник ГМ нанят.');
@@ -3811,7 +3850,7 @@ function oHeader(){
   const v=OL.v,my=oMy(),t=my!=null?oT(my):null;
   const sub=!v?'Онлайн-лига':`${v.name}${t?' · '+oRec(t):''}`;
   const back=OL.sid?`<button class="icon-btn" data-a="oTours" aria-label="Мои турниры" title="Мои турниры"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg></button>`:'';
-  return `<header class="top gut"><div class="top-row">${t?badge(t,44):'<span class="obig">🏒</span>'}<div class="top-name"><h1>${t?`${t.city} ${t.name}`:'Онлайн-лига'}</h1><small>${sub}</small></div>${back}<button class="icon-btn" data-tut="o-mode" data-a="mGo" data-id="menu" aria-label="Главное меню">${HOME_IC}</button><button class="icon-btn" data-a="menu" aria-label="Меню">${ICON.menu}</button></div></header>`;
+  return `<header class="top gut"><div class="top-row">${t?badge(t,44):'<span class="obig">🏒</span>'}<div class="top-name"><h1>${t?`${t.city} ${t.name}`:'Онлайн-лига'}</h1><small>${sub}</small></div>${rewardsButton()}${back}<button class="icon-btn" data-tut="o-mode" data-a="mGo" data-id="menu" aria-label="Главное меню">${HOME_IC}</button><button class="icon-btn" data-a="menu" aria-label="Меню">${ICON.menu}</button></div></header>`;
 }
 /* экран «Мои турниры» — точка входа в онлайн */
 function oViewTours(){
@@ -4188,7 +4227,7 @@ const OTOUR=[
   {tab:'home',t:'o-mode',title:'Главное меню',text:'Домик возвращает в главное меню: там переключаются режимы. Карьера сохраняется как была — можно играть и там, и тут.'},
   {tab:'home',t:'o-club',title:'Свой клуб',text:'Клуб выбирают до дедлайна, один на сезон. Зарплаты у всех клубов уравнены, а профиль показывает, как клуб будет меняться: молодая команда к плей-офф растёт, опытная сильна сразу, но к концу немного сдаёт.'},
   {tab:'games',t:'o-games',title:'Расписание и трансляции',text:'Матчи каждый вечер в одно и то же время. Во время матча горит LIVE: нажмите — откроется прямая трансляция. Откройте свой матч за 10 минут до начала или в первую минуту — команда почувствует поддержку, шансы чуть вырастут. Счёт держится в секрете до её конца, даже в таблице. Потом матч можно посмотреть в записи или открыть протокол.'},
-  {tab:'roster',rs:'plan',t:'o-plan',title:'План на матч',text:'Во время матча вы не можете вмешаться, поэтому тактику задают заранее. «По умолчанию» действует на все игры, а на любой ближайший матч можно поставить свой план — например, стиль, который бьёт любимый стиль соперника. «Авто» — решает компьютер.'},
+  {tab:'roster',rs:'plan',t:'o-plan',title:'План на матч и помощник ГМ',text:'Задайте стиль и риск заранее. План «По умолчанию» действует на игры без отдельного плана. Выберите ближайший матч, чтобы настроить его отдельно. Если наняли помощника ГМ, здесь можно посмотреть и применить его рекомендацию. В онлайне найм действует один сезон.'},
   {tab:'roster',rs:'lines',t:'o-lines',title:'Звенья',text:'Соберите звенья кнопками или вручную: нажмите на игрока, затем на место. Если кто-то травмируется, сервер сам поставит замену.'},
   {tab:'market',t:'o-market',title:'Рынок',text:'Свободные агенты — торги вслепую: назначьте зарплату, чужих ставок не видно, игрок уходит лучшему предложению через игровой день. Во вкладке «Академия» скауты ищут молодых талантов: воспитанники растут ускоренно и не сидят под потолком, но задержите их — и соперники переманят. Обмены с компьютером проходят, если им выгодно на 15–20%, а живому менеджеру предложение уходит на 48 часов.'},
   {tab:'table',t:'o-table',title:'Таблица и плей-офф',text:'После регулярки все 8 клубов выходят в плей-офф: 1-е место играет с 8-м, 2-е с 7-м. Серии до 4 побед, после каждого круга пересев.'},
@@ -4204,9 +4243,16 @@ function oTourGo(i){
 }
 const oTourSeen=()=>{try{return localStorage.getItem('gm-otour')==='1';}catch(e){return true;}};
 const OACT={
+  async rewardsOpen(){
+    U.rewards=true;U.sheet=null;U.rewardScroll=window.scrollY;window.scrollTo(0,0);render();
+    if(cloudable()&&await oAuth()){await refreshRewards();if(U.rewards)render();}
+  },
+  rewardsClose(){
+    U.rewards=false;render();window.scrollTo(0,U.rewardScroll||0);
+  },
   async rewardRefresh(){
     if(await oAuth())await refreshRewards();
-    if(!walletView())toast('Не удалось загрузить баланс аккаунта.');
+    if(!walletView())toast('Не удалось загрузить баланс шайб.');
     render();
   },
   assistantBuy:purchaseAssistant,
@@ -4511,7 +4557,7 @@ function mOnline(){
   return `<button class="mmode" data-a="mGo" data-id="online">${ic}<div><b>Онлайн-лига ${live}</b><small>${sub}</small><i>${cta}</i></div></button>`;
 }
 function viewMain(){
-  return `<header class="pick-hero gut mhero"><h1>Генменеджер</h1><p class="hero-sub">хоккейный симулятор</p></header>
+  return `<header class="pick-hero gut mhero"><h1>Генменеджер</h1><p class="hero-sub">хоккейный симулятор</p><div class="reward-main">${rewardsButton()}</div></header>
   <main class="gut">${mAcc()}<div class="mmodes">${mCareer()}${mOnline()}</div>
   <div class="btn-row"><button class="btn sm" data-a="wn">Что нового${verSeen()!==VER?' <i class="dot"></i>':''}</button><button class="btn sm" data-a="help">Как играть</button><button class="btn sm" data-a="menu">Настройки</button></div>
   <p class="small muted center">Новости и обновления — в канале игры. Бот: @hmrurubot</p></main>`;

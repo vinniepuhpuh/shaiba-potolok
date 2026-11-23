@@ -199,11 +199,12 @@ async function userCard(id){
     ${c.walletOps.length?`<table><tr><th>Время</th><th class="r">Δ</th><th>Комментарий</th></tr>${c.walletOps.map(o=>`<tr><td class="mono">${hhmm(o.created_at)}</td><td class="r">${o.delta>0?'+':''}${o.delta}</td><td>${esc(o.comment||'—')}</td></tr>`).join('')}</table>`:''}
     ${c.events.length?`<table><tr><th>Время</th><th>Событие</th></tr>${c.events.map(e=>`<tr><td class="mono">${hhmm(e.ts)}</td><td>${esc(e.type)}</td></tr>`).join('')}</table>`:''}
   </details></div>`;
-  $('#ucard #ban').onclick=async()=>{
+  const ban=$('#ucard #ban'),unban=$('#ucard #unban');
+  if(ban)ban.onclick=async()=>{
     const reason=prompt('Причина блокировки (увидит игрок):');if(reason==null)return;
     try{await post(`/api/admin/users/${id}/ban`,{banned:true,reason});userCard(id);}catch(e){alert(e.message);}
   };
-  $('#ucard #unban').onclick=async()=>{try{await post(`/api/admin/users/${id}/ban`,{banned:false});userCard(id);}catch(e){alert(e.message);}};
+  if(unban)unban.onclick=async()=>{try{await post(`/api/admin/users/${id}/ban`,{banned:false});userCard(id);}catch(e){alert(e.message);}};
   $('#ucard #ren').onclick=async()=>{
     const name=prompt('Новый никнейм (виден в онлайн-лиге, не затирается Telegram):',u.nick||u.first_name||'');if(!name)return;
     try{await post(`/api/admin/users/${id}/rename`,{name});userCard(id);}catch(e){alert(e.message);}
